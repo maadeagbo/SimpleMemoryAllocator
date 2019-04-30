@@ -25,6 +25,9 @@ namespace MemAlloc
   {
     uint32_t m_BHIndex;
     uint32_t m_BHAllocCount;
+#ifdef TAG_MEMORY
+    uint32_t m_BHTagHash;
+#endif
   };
 
   // Details a partitioned section of memory
@@ -35,6 +38,15 @@ namespace MemAlloc
     uint32_t m_BinSize;
   };
 
+  // Runtime information on partitioned memory
+  struct TrackerData
+  {
+    uint32_t m_HeadIdx;
+    uint32_t m_TrackedCount;
+    uint32_t m_PartitionOffset;
+    uint32_t m_Occupancy;
+  };
+
   // Data structure contains information on current state of managed memory allocations
   struct FreeList
   {
@@ -42,8 +54,7 @@ namespace MemAlloc
     PartitionData  m_PartitionLvlDetails[MemAlloc::k_NumLvl];
     
     BlockHeader*   m_Tracker;
-    uint32_t       m_TrackerHeadIndex[MemAlloc::k_NumLvl];
-    uint32_t       m_TrackerTailIndex[MemAlloc::k_NumLvl];
+    TrackerData    m_TrackerInfo[MemAlloc::k_NumLvl];
 
     uint32_t       m_TotalPartitionSize;
     uint32_t       m_TotalPartitionBins;
@@ -57,5 +68,8 @@ namespace MemAlloc
   
   // Contains heuristics for what bucket the allocation will take place in
   BlockHeader CalcAllocPartitionAndSize( uint32_t alloc_size, uint32_t bucket_hint = k_HintNone );
+
+  // Dump detailed contents of memory state
+  void        PrintHeapStatus();
 };
 

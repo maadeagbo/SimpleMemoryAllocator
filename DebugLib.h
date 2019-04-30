@@ -30,8 +30,8 @@ void PrintHandler( const char* fmt_str, ... );
 #define ASSERT_F( A, M, ... )                                          \
   if( !( A ) )                                                         \
   {                                                                    \
-    PrintHandler("\nAssert (%s : %d): " #A "\n", __FILE__, __LINE__ ); \
-    PrintHandler("  " M "\n", ##__VA_ARGS__);                          \
+    PrintHandler("o Assert (%s : %d): " #A "\n", __FILE__, __LINE__ ); \
+    PrintHandler("  - " M "\n", ##__VA_ARGS__);                        \
     PrintStackTrace();                                                 \
     SIMPLE_HALT();                                                     \
   }

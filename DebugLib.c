@@ -109,7 +109,7 @@ void PrintStackTrace()
       return;
   }
 
-  printf( "\nBacktrace (max depth : %d): \n", BACKTRACE_MAX_DEPTH );
+  printf( "o Backtrace (max depth : %d): \n", BACKTRACE_MAX_DEPTH );
 
   // the (num_addresses - 2) expression accounts for program && lib.c entry points 
   for( int iframe = 0; iframe < num_addresses - 2; iframe++ )
