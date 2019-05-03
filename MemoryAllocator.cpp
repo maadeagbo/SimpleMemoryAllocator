@@ -33,25 +33,29 @@ static uint32_t CalcAllignedAllocSize( uint64_t input );
 
 static const uint32_t k_BlockHeaderSize = (uint32_t)sizeof( MemAlloc::BlockHeader );
 
-MemAlloc::BlockHeader MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, uint32_t bucket_hint )
+MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, uint32_t bucket_hint )
 {
-  MemAlloc::BlockHeader block_output;
+  QueryResult result;
   alloc_size = CalcAllignedAllocSize( alloc_size );
 
-  uint16_t heap_bins[MemAlloc::k_NumLvl] = { k_Level0,
-                                             k_Level1,
-                                             k_Level2,
-                                             k_Level3,
-                                             k_Level4,
-                                             k_Level5 };
+  uint16_t heap_bins[k_NumLvl] = { k_Level0,
+                                   k_Level1,
+                                   k_Level2,
+                                   k_Level3,
+                                   k_Level4,
+                                   k_Level5 };
 
   // Simple heuristic : find best-fit heap bucket
-  uint16_t chosen_bucket = k_Level0;
-  for( size_t i = 0; i < MemAlloc::k_NumLvl; i++ )
+  uint16_t chosen_bucket           = k_Level0;
+  uint16_t chosen_bucket_idx       = 0;
+  uint32_t chosen_bucket_bin_count = 1;
+
+  for( size_t i = 0; i < k_NumLvl; i++ )
   {
     if( alloc_size > chosen_bucket )
     {
-      chosen_bucket = chosen_bucket << 1;
+      chosen_bucket     = chosen_bucket << 1;
+      chosen_bucket_idx = i;
     }
   }
 
@@ -59,24 +63,35 @@ MemAlloc::BlockHeader MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
   if( bucket_hint & k_HintStrictSize )
   {
     uint32_t min_bucket = 0;
-    for( size_t ibin = 0; ibin < MemAlloc::k_NumLvl && !min_bucket; ibin++ )
+    for( size_t ibin = 0; ibin < k_NumLvl && !min_bucket; ibin++ )
     {
       min_bucket = bucket_hint & heap_bins[ibin] ? heap_bins[ibin] : 0;
     }
 
     if( min_bucket )
     {
-      chosen_bucket           =  min_bucket;
-      uint32_t bins_to_alloc  =  alloc_size % min_bucket ? 1 : 0;
-      bins_to_alloc           += alloc_size / min_bucket;
+      chosen_bucket            = min_bucket;
+      chosen_bucket_bin_count  = alloc_size % min_bucket ? 1 : 0;
+      chosen_bucket_bin_count += alloc_size / min_bucket;
 
-      printf( " Using k_HintStrictSize :: Num bins alloc : %u\n", bins_to_alloc );
+      printf( " Using k_HintStrictSize :: Num bins alloc : %u\n", chosen_bucket_bin_count );
     }
   }
 
   printf( "  Bucket size : %u\n", chosen_bucket );
 
-  return block_output;
+  // check partition for free space
+
+  if( s_FreeList.m_TrackerInfo[chosen_bucket_idx].m_BinOccupancy < chosen_bucket_bin_count )
+  {
+    result.m_Result.m_BHAllocCount = chosen_bucket_bin_count;
+    result.m_Result.m_BHIndex      = chosen_bucket;
+    result.m_Status                = QueryResult::k_NoFreeSpace;
+
+    return result;
+  }
+
+  return result;
 }
 
 void MemAlloc::InitBase()
@@ -137,11 +152,16 @@ void MemAlloc::InitBase()
     mem_tag.m_BHIndex = 0;
     mem_tag.m_BHAllocCount = s_FreeList.m_PartitionLvlDetails[itracker_idx].m_BinCount;
 
-    s_FreeList.m_TrackerInfo[itracker_idx].m_Occupancy = mem_tag.m_BHAllocCount * s_FreeList.m_PartitionLvlDetails[itracker_idx].m_BinSize; 
+    s_FreeList.m_TrackerInfo[itracker_idx].m_BinOccupancy = mem_tag.m_BHAllocCount; 
 
     s_FreeList.m_TrackerInfo[itracker_idx].m_PartitionOffset = tracker_offsets;
     tracker_offsets += s_FreeList.m_PartitionLvlDetails[itracker_idx].m_BinCount;
   }
+}
+
+void* MemAlloc::Alloc( uint32_t byte_size, uint8_t pow_of_2_block_size )
+{
+  return nullptr;
 }
 
 void MemAlloc::PrintHeapStatus()
@@ -163,7 +183,7 @@ void MemAlloc::PrintHeapStatus()
     b_data             = TranslateByteFormat( part_data.m_BinSize, ByteFormat::k_Byte );
     ByteFormat b_data2 = TranslateByteFormat( part_data.m_BinCount * part_data.m_BinSize, ByteFormat::k_Byte );
     
-    printf( "  - Partition %u :: %10.3f %2s (bin size), %10u (bin count), %10.3f %2s (partition size)\n", ipartition, b_data.m_Size, b_data.m_Type, part_data.m_BinCount, b_data2.m_Size, b_data2.m_Type );
+    printf( "  - Partition %u :: %10.3f %2s (bin size + %zu B), %10u (bin count), %10.3f %2s (partition size)\n", ipartition, b_data.m_Size, b_data.m_Type, sizeof(BlockHeader), part_data.m_BinCount, b_data2.m_Size, b_data2.m_Type );
   }
   
   // For each partition: allocations && free memory (percentages), fragmentation(?)
@@ -176,8 +196,8 @@ void MemAlloc::PrintHeapStatus()
     PartitionData& part_data    = s_FreeList.m_PartitionLvlDetails[ipartition];
     TrackerData&   tracked_data = s_FreeList.m_TrackerInfo[ipartition];
 
-    float    mem_occupancy = ceilf32( (float)tracked_data.m_Occupancy / (float)(part_data.m_BinCount * part_data.m_BinSize) );
-    uint32_t bar_ticks     = (uint32_t)( (float)sizeof( percent_str ) * ( 1.f - mem_occupancy ) );
+    float    mem_occupancy = ceilf32( (float)tracked_data.m_BinOccupancy / (float)part_data.m_BinCount );
+    uint32_t bar_ticks     = (uint32_t)( (float)(sizeof( percent_str ) - 1) * ( 1.f - mem_occupancy ) );
 
     memset( percent_str, 0, sizeof( percent_str ) );
     memset( percent_str, 'x', bar_ticks );

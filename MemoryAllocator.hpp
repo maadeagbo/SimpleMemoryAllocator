@@ -44,7 +44,7 @@ namespace MemAlloc
     uint32_t m_HeadIdx;
     uint32_t m_TrackedCount;
     uint32_t m_PartitionOffset;
-    uint32_t m_Occupancy;
+    uint32_t m_BinOccupancy;
   };
 
   // Data structure contains information on current state of managed memory allocations
@@ -62,12 +62,31 @@ namespace MemAlloc
 
   void  InitBase();
 
-  void* Alloc( uint32_t byte_size, uint8_t pow_of_2_block_size );
-
   bool  DeAlloc( void* data_ptr );
+
+  void* Alloc( uint32_t byte_size, uint8_t pow_of_2_block_size = 8 );
   
+  template<typename T>
+  T* Alloc( uint32_t byte_size )
+  {
+    return (T*)Alloc( sizeof( T ) );
+  }
+  
+  struct QueryResult
+  {
+    enum
+    {
+      k_Success             = 0x1,
+      k_NoFreeSpace         = 0x2,
+      k_ExcessFragmentation = 0x4,
+    };
+    
+    BlockHeader m_Result;
+    uint8_t     m_Status;
+  };
+
   // Contains heuristics for what bucket the allocation will take place in
-  BlockHeader CalcAllocPartitionAndSize( uint32_t alloc_size, uint32_t bucket_hint = k_HintNone );
+  QueryResult CalcAllocPartitionAndSize( uint32_t alloc_size, uint32_t bucket_hint = k_HintNone );
 
   // Dump detailed contents of memory state
   void        PrintHeapStatus();
