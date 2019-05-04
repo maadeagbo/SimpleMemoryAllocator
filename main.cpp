@@ -1,4 +1,6 @@
 #include <cstdio>
+#include <random>
+#include <time.h>
 
 #include "MemoryAllocator.hpp"
 
@@ -17,6 +19,26 @@ void Foo()
   Bar();
 }
 
+void PrintAllocCalcResult( uint32_t alloc_size, uint32_t hints )
+{
+  printf( "o CalcAllocPartitionAndSize:\n" );
+  if( hints & MemAlloc::k_HintStrictSize )
+  {
+    MemAlloc::ByteFormat b_data = TranslateByteFormat( hints & ~MemAlloc::k_HintStrictSize, MemAlloc::ByteFormat::k_Byte );
+    printf( "  - Strict size hint : %4.2f %2s\n", b_data.m_Size, b_data.m_Type );
+  }
+  
+  MemAlloc::QueryResult query = MemAlloc::CalcAllocPartitionAndSize( alloc_size, hints );
+
+  printf( "  Status     : %s\n",  query.m_Status & MemAlloc::QueryResult::k_Success ? "Success" : 
+                                  query.m_Status & MemAlloc::QueryResult::k_NoFreeSpace ? "No free space" :
+                                  query.m_Status & MemAlloc::QueryResult::k_ExcessFragmentation ? "Fragmentation" : "unknown" );
+  printf( "  Alloc bins : %u\n",  query.m_AllocBins );
+
+  uint32_t partition = query.m_Status &= ~( MemAlloc::QueryResult::k_Success | MemAlloc::QueryResult::k_NoFreeSpace | MemAlloc::QueryResult::k_ExcessFragmentation );
+  printf( "  Block      : %u B\n", partition );
+}
+
 int main( const int argc, const char* argv[] )
 {
   RegisterExeForStackTrace( "memalloc_test" );
@@ -33,12 +55,14 @@ int main( const int argc, const char* argv[] )
 
   printf( "\n *** Testing CalcAllocPartitionAndSize func *** \n\n" );
 
-  uint32_t byte_request = 233;
+  srand( time( nullptr ) );
+  uint32_t byte_request = rand() % 512;
   printf( "Requesting %u bytes \n", byte_request );
-  MemAlloc::CalcAllocPartitionAndSize( byte_request );
-  MemAlloc::CalcAllocPartitionAndSize( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
-  MemAlloc::CalcAllocPartitionAndSize( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level2 );
-  MemAlloc::CalcAllocPartitionAndSize( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level4 );
+
+  PrintAllocCalcResult( byte_request, MemAlloc::k_HintNone );
+  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
+  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level2 );
+  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level4 );
 
   printf( "\n *** Testing ASSERT_F macro *** \n\n" );
 

@@ -11,20 +11,6 @@
 #define MEM_MAX_SIZE ( 0x1 << 20 ) * 500 // 500 mb
 #endif
 
-struct ByteFormat
-{
-  enum : uint8_t
-  {
-    k_Byte = 0,
-    k_KiloByte,
-    k_MegaByte,
-  };
-  float       m_Size;
-  const char* m_Type;
-};
-
-static ByteFormat TranslateByteFormat( float size, uint8_t byte_type );
-
 static void*              s_MemBlockPtr;
 static MemAlloc::FreeList s_FreeList;
 
@@ -50,13 +36,14 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
   uint16_t chosen_bucket_idx       = 0;
   uint32_t chosen_bucket_bin_count = 1;
 
-  for( size_t i = 0; i < k_NumLvl; i++ )
+  for( size_t i = 0; i < sizeof( heap_bins ); i++ )
   {
-    if( alloc_size > chosen_bucket )
+    if( alloc_size <= chosen_bucket )
     {
-      chosen_bucket     = chosen_bucket << 1;
       chosen_bucket_idx = i;
+      break;
     }
+    chosen_bucket = chosen_bucket << 1;
   }
 
   // Strict heuristic : Attempt to allocate using specified heap bucket
@@ -65,7 +52,11 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
     uint32_t min_bucket = 0;
     for( size_t ibin = 0; ibin < k_NumLvl && !min_bucket; ibin++ )
     {
-      min_bucket = bucket_hint & heap_bins[ibin] ? heap_bins[ibin] : 0;
+      if( bucket_hint & heap_bins[ibin] )
+      {
+        min_bucket        = heap_bins[ibin];
+        chosen_bucket_idx = ibin;
+      }
     }
 
     if( min_bucket )
@@ -73,23 +64,38 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
       chosen_bucket            = min_bucket;
       chosen_bucket_bin_count  = alloc_size % min_bucket ? 1 : 0;
       chosen_bucket_bin_count += alloc_size / min_bucket;
-
-      printf( " Using k_HintStrictSize :: Num bins alloc : %u\n", chosen_bucket_bin_count );
     }
   }
 
-  printf( "  Bucket size : %u\n", chosen_bucket );
+  result.m_AllocBins = chosen_bucket_bin_count;
+  result.m_Status    = chosen_bucket;
 
   // check partition for free space
-
   if( s_FreeList.m_TrackerInfo[chosen_bucket_idx].m_BinOccupancy < chosen_bucket_bin_count )
   {
-    result.m_Result.m_BHAllocCount = chosen_bucket_bin_count;
-    result.m_Result.m_BHIndex      = chosen_bucket;
-    result.m_Status                = QueryResult::k_NoFreeSpace;
-
+    result.m_Status |= QueryResult::k_NoFreeSpace;
     return result;
   }
+
+  BlockHeader* free_bin          = nullptr;
+  BlockHeader* tracked_bin       = s_FreeList.m_Tracker;
+  TrackerData& tracked_bins_info = s_FreeList.m_TrackerInfo[chosen_bucket_idx];
+
+  // find next available free space to allocate from
+  for( uint32_t ibin = 0; ibin < tracked_bins_info.m_TrackedCount && free_bin == nullptr; ibin++, tracked_bin++ )
+  {
+    free_bin = tracked_bin->m_BHAllocCount >= chosen_bucket_bin_count ? tracked_bin : nullptr;
+  }
+  
+  // partition exhibits too much fragmentation
+  if( free_bin == nullptr )
+  {
+    result.m_Status |= QueryResult::k_NoFreeSpace | QueryResult::k_ExcessFragmentation;
+    return result;
+  }
+
+  result.m_Status |= QueryResult::k_Success;
+  result.m_Result = *free_bin;
 
   return result;
 }
@@ -215,10 +221,7 @@ void MemAlloc::PrintHeapStatus()
   }
 }
 
-//***********************************************************************************************
-//***********************************************************************************************
-
-static ByteFormat TranslateByteFormat( float size, uint8_t byte_type )
+MemAlloc::ByteFormat MemAlloc::TranslateByteFormat( float size, uint8_t byte_type )
 {
   if( byte_type == ByteFormat::k_Byte )
   {
@@ -242,6 +245,9 @@ static ByteFormat TranslateByteFormat( float size, uint8_t byte_type )
   }
   return { size, "mB" };
 }
+
+//***********************************************************************************************
+//***********************************************************************************************
 
 // Size of partition is restricted by 2 factors: freelist tracker && block header
 // * Each bin in the partition must support a blockheader

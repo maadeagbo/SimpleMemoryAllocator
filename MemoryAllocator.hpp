@@ -79,10 +79,13 @@ namespace MemAlloc
       k_Success             = 0x1,
       k_NoFreeSpace         = 0x2,
       k_ExcessFragmentation = 0x4,
+
+      // can only use flags up to 0x20
     };
     
     BlockHeader m_Result;
-    uint8_t     m_Status;
+    uint32_t    m_AllocBins;
+    uint32_t    m_Status;
   };
 
   // Contains heuristics for what bucket the allocation will take place in
@@ -90,5 +93,20 @@ namespace MemAlloc
 
   // Dump detailed contents of memory state
   void        PrintHeapStatus();
+
+//----------------------------------------------------------------------------------------------
+  struct ByteFormat
+  {
+    enum : uint8_t
+    {
+      k_Byte = 0,
+      k_KiloByte,
+      k_MegaByte,
+    };
+    float       m_Size;
+    const char* m_Type;
+  };
+
+  ByteFormat TranslateByteFormat( float size, uint8_t byte_type );
 };
 
