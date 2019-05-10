@@ -64,7 +64,8 @@ namespace MemAlloc
 
   bool  DeAlloc( void* data_ptr );
 
-  void* Alloc( uint32_t byte_size, uint8_t pow_of_2_block_size = 8 );
+  // hints : 
+  void* Alloc( uint32_t byte_size, uint32_t bucket_hints = k_HintNone, uint8_t block_size = 4 );
   
   template<typename T>
   T* Alloc( uint32_t byte_size )
@@ -80,12 +81,12 @@ namespace MemAlloc
       k_NoFreeSpace         = 0x2,
       k_ExcessFragmentation = 0x4,
 
-      // can only use flags up to 0x20
+      // can only use flags up to and not including 0x20
     };
     
-    BlockHeader m_Result;
-    uint32_t    m_AllocBins;
-    uint32_t    m_Status;
+    BlockHeader* m_Result;
+    uint32_t     m_AllocBins;
+    uint32_t     m_Status;
   };
 
   // Contains heuristics for what bucket the allocation will take place in

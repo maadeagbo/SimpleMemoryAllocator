@@ -64,6 +64,11 @@ int main( const int argc, const char* argv[] )
   PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level2 );
   PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level4 );
 
+  printf( "\n *** Testing Allocation func *** \n\n" );
+
+  MemAlloc::Alloc( byte_request );
+  MemAlloc::Alloc( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
+
   printf( "\n *** Testing ASSERT_F macro *** \n\n" );
 
   ASSERT_F( false, "Printing formatted message :: %s, %.3f, %p", "YAH", 32.1f, Foo );
