@@ -23,7 +23,13 @@ namespace MemAlloc
   // Used to track allocated blocks of memory
   struct BlockHeader
   {
-    uint32_t m_BHIndex;
+    enum
+    {
+      k_PartitionMask = 0xf,
+      k_IndexBitShift = 4,   // How far to shift m_BHIndexNPartition to get index (based on k_PartitionMask )
+    };
+
+    uint32_t m_BHIndexNPartition;
     uint32_t m_BHAllocCount;
 #ifdef TAG_MEMORY
     uint32_t m_BHTagHash;
@@ -62,10 +68,10 @@ namespace MemAlloc
 
   void  InitBase();
 
-  bool  DeAlloc( void* data_ptr );
-
   // hints : 
   void* Alloc( uint32_t byte_size, uint32_t bucket_hints = k_HintNone, uint8_t block_size = 4 );
+
+  bool  Free( void* data_ptr );
   
   template<typename T>
   T* Alloc( uint32_t byte_size )
@@ -84,9 +90,9 @@ namespace MemAlloc
       // can only use flags up to and not including 0x20
     };
     
-    BlockHeader* m_Result;
     uint32_t     m_AllocBins;
     uint32_t     m_Status;
+    uint32_t     m_TrackerSelectedIdx;
   };
 
   // Contains heuristics for what bucket the allocation will take place in

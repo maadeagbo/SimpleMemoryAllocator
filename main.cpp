@@ -66,8 +66,19 @@ int main( const int argc, const char* argv[] )
 
   printf( "\n *** Testing Allocation func *** \n\n" );
 
-  MemAlloc::Alloc( byte_request );
-  MemAlloc::Alloc( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
+  void* test_ptrs[5]; 
+  printf( "\n*** Bang ***\n" );
+  test_ptrs[0] = MemAlloc::Alloc( byte_request );
+  printf( "\n*** Bang ***\n" );
+  test_ptrs[1] = MemAlloc::Alloc( byte_request );
+  printf( "\n*** Bang ***\n" );
+  test_ptrs[2] = MemAlloc::Alloc( byte_request );
+  printf( "\n*** Bang ***\n" );
+  test_ptrs[3] = MemAlloc::Alloc( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
+
+  MemAlloc::Free( test_ptrs[1] );
+  MemAlloc::Free( test_ptrs[0] );
+  MemAlloc::Free( test_ptrs[2] );
 
   printf( "\n *** Testing ASSERT_F macro *** \n\n" );
 
