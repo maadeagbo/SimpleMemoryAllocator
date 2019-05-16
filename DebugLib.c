@@ -1,15 +1,24 @@
 #include "DebugLib.h"
+#include <stdio.h>
+
+#ifdef __linux__
 #include <execinfo.h>
 #include <cxxabi.h>
-#include <stdio.h>
+#elif _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <dbghelp.h>
+#endif
 
 #ifndef BACKTRACE_MAX_DEPTH
   #define BACKTRACE_MAX_DEPTH 20
 #endif
 
+#define DEBUG_STR_MAX 128
+
 struct DebugString
 {
-  char str[128];
+  char str[DEBUG_STR_MAX];
 };
 
 static const char*        s_ExeName = "";
@@ -46,6 +55,7 @@ void PrintHandler( const char* fmt_str, ... )
   }
 }
 
+#ifdef __linux__
 // '('        <-- start of name, '+' or ')' <-- end of name
 static DebugString ExtractMangledName( const char* input )
 {
@@ -89,11 +99,39 @@ static DebugString ExtractMangledName( const char* input )
 
   return output;
 }
+#endif
 
 void PrintStackTrace()
 {
 #ifdef WIN32
-  #error Unimplemented
+  // capture stack addresses
+  void* stack_frames[BACKTRACE_MAX_DEPTH];
+  WORD stack_depth = CaptureStackBackTrace( 0, BACKTRACE_MAX_DEPTH, stack_frames, NULL );
+
+  HANDLE curr_process = GetCurrentProcess();
+  SymInitialize( curr_process, NULL, TRUE );
+
+  SYMBOL_INFO *symbol  = (SYMBOL_INFO *)malloc( sizeof( SYMBOL_INFO )+( sizeof( struct DebugString ) - 1) * sizeof( TCHAR ));
+  symbol->MaxNameLen   = sizeof( struct DebugString );
+  symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+
+  DWORD displacement;
+  IMAGEHLP_LINE64 *line = (IMAGEHLP_LINE64 *)malloc(sizeof(IMAGEHLP_LINE64));
+  line->SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+  for (int i = 0; i < stack_depth; i++)
+  {
+      DWORD64 address = (DWORD64)(stack_frames[i]);
+      SymFromAddr(curr_process, address, NULL, symbol);
+      if (SymGetLineFromAddr64(curr_process, address, &displacement, line))
+      {
+          printf("\tat %s in %s: line: %lu: address: 0x%0X\n", symbol->Name, line->FileName, line->LineNumber, symbol->Address);
+      }
+      else
+      {
+          printf("\tSymGetLineFromAddr64 returned error code %lu.\n", GetLastError());
+          printf("\tat %s, address 0x%0X.\n", symbol->Name, symbol->Address);
+      }
+  }
 #elif __linux__
   // backtrace_symbols makes use of malloc
   // backtrace_symbols_fd makes use of a provided file descriptor

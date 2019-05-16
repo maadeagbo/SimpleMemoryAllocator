@@ -6,20 +6,24 @@
 #include <string.h>
 #include <stdarg.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifdef _WIN32
 #define SIMPLE_HALT() __debugbreak()
 #else
 #define SIMPLE_HALT() __builtin_trap();
 #endif  // linux
 
-void RegisterExeForStackTrace( const char* exe_name );
+	void RegisterExeForStackTrace( const char* exe_name );
 
-typedef void (*DebugPrintCallback)( const char*, ... );
-void RegisterDebugPrint( DebugPrintCallback cb );
+	typedef void (*DebugPrintCallback)( const char*, ... );
+	void RegisterDebugPrint( DebugPrintCallback cb );
 
-void PrintStackTrace();
+	void PrintStackTrace();
 
-void PrintHandler( const char* fmt_str, ... );
+	void PrintHandler( const char* fmt_str, ... );
 
 #ifdef NDEBUG
 
@@ -37,3 +41,7 @@ void PrintHandler( const char* fmt_str, ... );
   }
 
 #endif  // NDEBUG
+
+#ifdef __cplusplus
+}
+#endif

@@ -2,6 +2,7 @@
 #include <random>
 #include <time.h>
 
+#include "DebugLib.h"
 #include "MemoryAllocator.hpp"
 
 static void Yah()
@@ -24,7 +25,7 @@ void PrintAllocCalcResult( uint32_t alloc_size, uint32_t hints )
   printf( "o CalcAllocPartitionAndSize:\n" );
   if( hints & MemAlloc::k_HintStrictSize )
   {
-    MemAlloc::ByteFormat b_data = TranslateByteFormat( hints & ~MemAlloc::k_HintStrictSize, MemAlloc::ByteFormat::k_Byte );
+    MemAlloc::ByteFormat b_data = TranslateByteFormat( (float)(hints & ~MemAlloc::k_HintStrictSize), MemAlloc::ByteFormat::k_Byte );
     printf( "  - Strict size hint : %4.2f %2s\n", b_data.m_Size, b_data.m_Type );
   }
   
@@ -41,6 +42,9 @@ void PrintAllocCalcResult( uint32_t alloc_size, uint32_t hints )
 
 int main( const int argc, const char* argv[] )
 {
+  (void*)argc;
+  (void*)argv;
+
   RegisterExeForStackTrace( "memalloc_test" );
 
   printf( "\n *** Testing call stack dump *** \n\n" );
@@ -59,10 +63,10 @@ int main( const int argc, const char* argv[] )
   uint32_t byte_request = rand() % 512;
   printf( "Requesting %u bytes \n", byte_request );
 
-  PrintAllocCalcResult( byte_request, MemAlloc::k_HintNone );
-  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
-  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level2 );
-  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level4 );
+  PrintAllocCalcResult( (float)byte_request, MemAlloc::k_HintNone );
+  PrintAllocCalcResult( (float)byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
+  PrintAllocCalcResult( (float)byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level2 );
+  PrintAllocCalcResult( (float)byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level4 );
 
   printf( "\n *** Testing Allocation func *** \n\n" );
 

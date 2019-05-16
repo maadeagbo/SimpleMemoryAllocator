@@ -14,8 +14,8 @@
 static void*              s_MemBlockPtr;
 static MemAlloc::FreeList s_FreeList;
 
-static MemAlloc::PartitionData GetPartition( const uint64_t total_size, uint16_t bin_size, float percentage );
-static uint32_t CalcAllignedAllocSize( uint64_t input, uint32_t alignment = BASE_ALIGN );
+static MemAlloc::PartitionData GetPartition( const uint32_t total_size, uint16_t bin_size, float percentage );
+static uint32_t CalcAllignedAllocSize( uint32_t input, uint32_t alignment = BASE_ALIGN );
 
 static const uint32_t k_BlockHeaderSize = (uint32_t)sizeof( MemAlloc::BlockHeader );
 
@@ -237,7 +237,7 @@ void* MemAlloc::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_
   // total_alloc is calculated based on the memory needed for the allocation
   // the offset to the next region is based on the "actual" bin_size (includes k_BlockHeaderSize per bin)
   const uint32_t total_alloc     = ( ( bin_size - k_BlockHeaderSize ) * mem_marker->m_BHAllocCount ) + k_BlockHeaderSize;
-  const uint32_t next_bin_offset = ceilf32( (float)total_alloc / (float)bin_size );
+  const uint32_t next_bin_offset = ceil( (float)total_alloc / (float)bin_size );
 
   printf( "%u partition :: free bins %u, alloc'd bins %u (%u B), next bin offset %u(%u B offset)\n",
           bin_size - k_BlockHeaderSize,
@@ -375,7 +375,7 @@ void MemAlloc::PrintHeapStatus()
     PartitionData& part_data    = s_FreeList.m_PartitionLvlDetails[ipartition];
     TrackerData&   tracked_data = s_FreeList.m_TrackerInfo[ipartition];
 
-    float    mem_occupancy = ceilf32( (float)tracked_data.m_BinOccupancy / (float)part_data.m_BinCount );
+    float    mem_occupancy = ceil( (float)tracked_data.m_BinOccupancy / (float)part_data.m_BinCount );
     uint32_t bar_ticks     = (uint32_t)( (float)(sizeof( percent_str ) - 1) * ( 1.f - mem_occupancy ) );
 
     memset( percent_str, 0, sizeof( percent_str ) );
@@ -425,11 +425,11 @@ MemAlloc::ByteFormat MemAlloc::TranslateByteFormat( float size, uint8_t byte_typ
 // Size of partition is restricted by 2 factors: freelist tracker && block header
 // * Each bin in the partition must support a blockheader
 // * Each bin in the partition must be possibly represented by a tracker in the free list
-static MemAlloc::PartitionData GetPartition( const uint64_t total_size, uint16_t bin_size, float percentage )
+static MemAlloc::PartitionData GetPartition( const uint32_t total_size, uint16_t bin_size, float percentage )
 {
   MemAlloc::PartitionData part_output;
 
-  uint64_t fixed_part_size = CalcAllignedAllocSize( (uint64_t)( (double)total_size * (double)percentage ) );
+  uint32_t fixed_part_size = CalcAllignedAllocSize( (uint32_t)( (double)total_size * (double)percentage ) );
 
   part_output.m_BinSize  = bin_size + k_BlockHeaderSize;
   // m_BinCount calculation : k_BlockHeaderSize is added to the denominator because each bin needs
@@ -441,7 +441,7 @@ static MemAlloc::PartitionData GetPartition( const uint64_t total_size, uint16_t
   return part_output;
 }
 
-static uint32_t CalcAllignedAllocSize( uint64_t input, uint32_t alignment )
+static uint32_t CalcAllignedAllocSize( uint32_t input, uint32_t alignment )
 {
   const uint32_t remainder = input % alignment;
   input += remainder ? alignment - remainder : 0;

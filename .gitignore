@@ -1,0 +1,4 @@
+build
+*.exe
+memalloc_test
+mem_alloc_test
