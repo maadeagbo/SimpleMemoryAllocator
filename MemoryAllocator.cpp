@@ -43,8 +43,8 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
   alloc_size = CalcAllignedAllocSize( alloc_size );
 
   // Simple heuristic : find best-fit heap partition
-  uint16_t chosen_bucket           = k_Level0;
-  uint16_t chosen_bucket_idx       = 0;
+  uint32_t chosen_bucket           = k_Level0;
+  uint32_t chosen_bucket_idx       = 0;
   uint32_t chosen_bucket_bin_count = 1;
 
   for( size_t i = 0; i < sizeof( s_HeapBinSizes ); i++ )
@@ -62,7 +62,7 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
   if( bucket_hint & k_HintStrictSize )
   {
     uint32_t max_bucket = 0;
-    for( size_t ibin = 0; ibin < k_NumLvl; ibin++ )
+    for( uint32_t ibin = 0; ibin < k_NumLvl; ibin++ )
     {
       if( bucket_hint & s_HeapBinSizes[ibin] )
       {
@@ -216,7 +216,7 @@ void* MemAlloc::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_
 
   ASSERT_F( bin_size > k_BlockHeaderSize, "Missing bin size returned from CalcAllocPartitionAndSize()" );
 
-  int8_t partition_idx = -1;
+  int32_t partition_idx = -1;
   for(uint32_t ipartition = 0; ipartition < k_NumLvl && partition_idx < 0; ipartition++)
   {
     partition_idx = s_HeapBinSizes[ipartition] == ( bin_size - k_BlockHeaderSize ) ? ipartition : -1;
@@ -237,7 +237,7 @@ void* MemAlloc::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_
   // total_alloc is calculated based on the memory needed for the allocation
   // the offset to the next region is based on the "actual" bin_size (includes k_BlockHeaderSize per bin)
   const uint32_t total_alloc     = ( ( bin_size - k_BlockHeaderSize ) * mem_marker->m_BHAllocCount ) + k_BlockHeaderSize;
-  const uint32_t next_bin_offset = ceil( (float)total_alloc / (float)bin_size );
+  const uint32_t next_bin_offset = (uint32_t)ceil( (float)total_alloc / (float)bin_size );
 
   printf( "%u partition :: free bins %u, alloc'd bins %u (%u B), next bin offset %u(%u B offset)\n",
           bin_size - k_BlockHeaderSize,
@@ -394,29 +394,29 @@ void MemAlloc::PrintHeapStatus()
   }
 }
 
-MemAlloc::ByteFormat MemAlloc::TranslateByteFormat( float size, uint8_t byte_type )
+MemAlloc::ByteFormat MemAlloc::TranslateByteFormat( uint32_t size, uint8_t byte_type )
 {
   if( byte_type == ByteFormat::k_Byte )
   {
-    if( size > 1024.f && size < 1048576.f )
+    if( size > 1024 && size < 1048576 )
     {
       return { size / 1024.f, "kB" };
     }
-    else if( size > 1048576.f )
+    else if( size > 1048576 )
     {
       return { size / 1048576.f, "mB" };
     }
-    return { size, "B" };
+    return { (float)size, "B" };
   }
   else if( byte_type == ByteFormat::k_KiloByte )
   {
-    if( size > 1024.f )
+    if( size > 1024 )
     {
       return { size / 1024.f, "mB" };
     }
-    return { size, "kB" };
+    return { (float)size, "kB" };
   }
-  return { size, "mB" };
+  return { (float)size, "mB" };
 }
 
 //***********************************************************************************************

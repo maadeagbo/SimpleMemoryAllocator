@@ -25,7 +25,7 @@ void PrintAllocCalcResult( uint32_t alloc_size, uint32_t hints )
   printf( "o CalcAllocPartitionAndSize:\n" );
   if( hints & MemAlloc::k_HintStrictSize )
   {
-    MemAlloc::ByteFormat b_data = TranslateByteFormat( (float)(hints & ~MemAlloc::k_HintStrictSize), MemAlloc::ByteFormat::k_Byte );
+    MemAlloc::ByteFormat b_data = TranslateByteFormat( hints & ~MemAlloc::k_HintStrictSize, MemAlloc::ByteFormat::k_Byte );
     printf( "  - Strict size hint : %4.2f %2s\n", b_data.m_Size, b_data.m_Type );
   }
   
@@ -59,14 +59,14 @@ int main( const int argc, const char* argv[] )
 
   printf( "\n *** Testing CalcAllocPartitionAndSize func *** \n\n" );
 
-  srand( time( nullptr ) );
+  srand( (unsigned int)time( nullptr ) );
   uint32_t byte_request = rand() % 512;
   printf( "Requesting %u bytes \n", byte_request );
 
-  PrintAllocCalcResult( (float)byte_request, MemAlloc::k_HintNone );
-  PrintAllocCalcResult( (float)byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
-  PrintAllocCalcResult( (float)byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level2 );
-  PrintAllocCalcResult( (float)byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level4 );
+  PrintAllocCalcResult( byte_request, MemAlloc::k_HintNone );
+  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
+  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level2 );
+  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level4 );
 
   printf( "\n *** Testing Allocation func *** \n\n" );
 

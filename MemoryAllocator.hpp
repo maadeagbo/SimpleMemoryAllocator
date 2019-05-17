@@ -114,6 +114,6 @@ namespace MemAlloc
     const char* m_Type;
   };
 
-  ByteFormat TranslateByteFormat( float size, uint8_t byte_type );
+  ByteFormat TranslateByteFormat( uint32_t size, uint8_t byte_type );
 };
 

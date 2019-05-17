@@ -14,11 +14,9 @@
   #define BACKTRACE_MAX_DEPTH 20
 #endif
 
-#define DEBUG_STR_MAX 128
-
 struct DebugString
 {
-  char str[DEBUG_STR_MAX];
+  char str[128];
 };
 
 static const char*        s_ExeName = "";
@@ -103,6 +101,8 @@ static DebugString ExtractMangledName( const char* input )
 
 void PrintStackTrace()
 {
+  printf( "o Backtrace (max depth : %d): \n", BACKTRACE_MAX_DEPTH );
+
 #ifdef WIN32
   // capture stack addresses
   void* stack_frames[BACKTRACE_MAX_DEPTH];
@@ -113,24 +113,22 @@ void PrintStackTrace()
 
   SYMBOL_INFO *symbol  = (SYMBOL_INFO *)malloc( sizeof( SYMBOL_INFO )+( sizeof( struct DebugString ) - 1) * sizeof( TCHAR ));
   symbol->MaxNameLen   = sizeof( struct DebugString );
-  symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+  symbol->SizeOfStruct = sizeof( SYMBOL_INFO );
 
   DWORD displacement;
-  IMAGEHLP_LINE64 *line = (IMAGEHLP_LINE64 *)malloc(sizeof(IMAGEHLP_LINE64));
-  line->SizeOfStruct = sizeof(IMAGEHLP_LINE64);
-  for (int i = 0; i < stack_depth; i++)
+  IMAGEHLP_LINE64 *line = (IMAGEHLP_LINE64 *)malloc( sizeof(IMAGEHLP_LINE64) );
+  line->SizeOfStruct    = sizeof( IMAGEHLP_LINE64 );
+  
+  for( int iframe = 0; iframe < stack_depth; iframe++ )
   {
-      DWORD64 address = (DWORD64)(stack_frames[i]);
-      SymFromAddr(curr_process, address, NULL, symbol);
-      if (SymGetLineFromAddr64(curr_process, address, &displacement, line))
-      {
-          printf("\tat %s in %s: line: %lu: address: 0x%0X\n", symbol->Name, line->FileName, line->LineNumber, symbol->Address);
-      }
-      else
-      {
-          printf("\tSymGetLineFromAddr64 returned error code %lu.\n", GetLastError());
-          printf("\tat %s, address 0x%0X.\n", symbol->Name, symbol->Address);
-      }
+    DWORD64 address = (DWORD64)( stack_frames[iframe] );
+    SymFromAddr( curr_process, address, NULL, symbol );
+
+    if( SymGetLineFromAddr64( curr_process, address, &displacement, line ) )
+    {
+      //  #%.*d %s in ", 2, ( num_addresses - 2 ) - iframe - 1
+      printf(" #%.*d %s in %s : %lu\n", 2, ( stack_depth - 2 ) - iframe - 1, symbol->Name, line->FileName, line->LineNumber );
+    }
   }
 #elif __linux__
   // backtrace_symbols makes use of malloc
@@ -147,21 +145,17 @@ void PrintStackTrace()
       return;
   }
 
-  printf( "o Backtrace (max depth : %d): \n", BACKTRACE_MAX_DEPTH );
-
   // the (num_addresses - 2) expression accounts for program && lib.c entry points 
-  for( int iframe = 0; iframe < num_addresses - 2; iframe++ )
+  for( int iframe = 0; iframe < num_addresses; iframe++ )
   {
     DebugString func = ExtractMangledName( symbol_data[iframe] );
-    printf(" #%.*d %s, ", 2, ( num_addresses - 2 ) - iframe - 1, func.str );
+    printf(" #%.*d %s in ", 2, num_addresses - iframe - 1, func.str );
     
     char sys_command[256];
-    // if successful, it will automatically print
-    snprintf( sys_command, sizeof( sys_command ), "addr2line %p -e %s", trace[iframe], s_ExeName);
+    snprintf( sys_command, sizeof( sys_command ), "addr2line %p -e %s", trace[iframe], s_ExeName );
     
-    FILE *fp = popen( sys_command, "r");
-
-    // need to finish off line if exe is uninitialized or command fails
+    // dump results of system command to file ( need to finish off line if exe is uninitialized or command fails )
+    FILE *fp = popen( sys_command, "r" );
     if( *s_ExeName == '\0' && fp == NULL )
     {
       printf( "\n" );
@@ -182,4 +176,5 @@ void PrintStackTrace()
 
   free( symbol_data );
 #endif
+  printf("\n");
 }
