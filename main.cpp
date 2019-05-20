@@ -81,6 +81,7 @@ int main( const int argc, const char* argv[] )
   test_ptrs[3] = MemAlloc::Alloc( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
 
   MemAlloc::Free( test_ptrs[1] );
+  MemAlloc::Free( test_ptrs[3] );
   MemAlloc::Free( test_ptrs[0] );
   MemAlloc::Free( test_ptrs[2] );
 

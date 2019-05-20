@@ -338,7 +338,35 @@ bool MemAlloc::Free( void* data_ptr )
   
   // - use divide & conquer to find its spot in list ( using index as pivot )
   //   - if index is +-1 from the free slot either in front or back of it, coalesce
-  //   - if can't coalesce, shift list to the right & insert reclaimed memory 
+  //   - if can't coalesce, shift list to the right & insert reclaimed memory
+  uint32_t head       = 0;
+  uint32_t tail       = tracker_info.m_TrackedCount;
+  int32_t  insert_idx = -1;
+  while( tail - head > 0 && insert_idx < 0 )
+  {
+    uint32_t pivot_idx = ( tail - head ) / 2;
+
+    uint32_t left_idx  = tracker_data[pivot_idx].m_BHIndexNPartition     >> BlockHeader::k_IndexBitShift;
+    uint32_t right_idx = tracker_data[pivot_idx + 1].m_BHIndexNPartition >> BlockHeader::k_IndexBitShift;
+    if( (int32_t)left_idx < insert_idx && insert_idx < (int32_t)right_idx )
+    {
+      insert_idx = pivot_idx + 1;
+
+      printf( "o Bang. Divide & Conquer : %u\n", insert_idx );
+    }
+    else if( (int32_t)left_idx > insert_idx )
+    {
+      tail = left_idx;
+
+      printf( "o Bang. Divide & Conquer : %u|%u\n", head, tail );
+    }
+    else
+    {
+      head = right_idx;
+
+      printf( "o Bang. Divide & Conquer : %u|%u\n", head, tail );
+    }
+  }
 
   return false;
 }
