@@ -60,6 +60,7 @@ namespace MemAlloc
     PartitionData  m_PartitionLvlDetails[MemAlloc::k_NumLvl];
     
     BlockHeader*   m_Tracker;
+    BlockHeader    m_LargestAlloc[MemAlloc::k_NumLvl];
     TrackerData    m_TrackerInfo[MemAlloc::k_NumLvl];
 
     uint32_t       m_TotalPartitionSize;

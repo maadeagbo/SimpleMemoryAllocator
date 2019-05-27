@@ -20,6 +20,8 @@ void Foo()
   Bar();
 }
 
+uint32_t GenerateHint( uint32_t key );
+
 void PrintAllocCalcResult( uint32_t alloc_size, uint32_t hints )
 {
   printf( "o CalcAllocPartitionAndSize:\n" );
@@ -60,13 +62,13 @@ int main( const int argc, const char* argv[] )
   printf( "\n *** Testing CalcAllocPartitionAndSize func *** \n\n" );
 
   srand( (unsigned int)time( nullptr ) );
-  uint32_t byte_request = rand() % 512;
+  uint32_t byte_request = ( ( rand() % 512 ) * rand() ) % 512;
   printf( "Requesting %u bytes \n", byte_request );
 
   PrintAllocCalcResult( byte_request, MemAlloc::k_HintNone );
-  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
-  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level2 );
   PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level4 );
+  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level2 );
+  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
 
   printf( "\n *** Testing Allocation func *** \n\n" );
 
@@ -81,13 +83,125 @@ int main( const int argc, const char* argv[] )
   test_ptrs[3] = MemAlloc::Alloc( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
 
   MemAlloc::Free( test_ptrs[1] );
+  printf( "--------------------------------------------------------------------------------\n" );
+  MemAlloc::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
   MemAlloc::Free( test_ptrs[3] );
+  printf( "--------------------------------------------------------------------------------\n" );
+  MemAlloc::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
   MemAlloc::Free( test_ptrs[0] );
+  printf( "--------------------------------------------------------------------------------\n" );
+  MemAlloc::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
   MemAlloc::Free( test_ptrs[2] );
+  printf( "--------------------------------------------------------------------------------\n" );
+  MemAlloc::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
 
-  printf( "\n *** Testing ASSERT_F macro *** \n\n" );
+  printf( "\n *** Testing Allocation func 2 *** \n\n" );
 
-  ASSERT_F( false, "Printing formatted message :: %s, %.3f, %p", "YAH", 32.1f, Foo );
+  const uint32_t alloc_count = 150;
+  void*          test_ptrs2[alloc_count];
+  bool           free_idx_flags[alloc_count];
+  
+  for( uint32_t irequest = 0; irequest < alloc_count; ++irequest )
+  {
+    byte_request = ( ( rand() % 512 ) * rand() ) % 1024;
+
+    // randomize hints
+    test_ptrs2[irequest] = MemAlloc::Alloc( byte_request, GenerateHint( byte_request ) );
+    free_idx_flags[irequest] = true;
+    
+    printf( "> request %u\n", byte_request );
+  }
+  
+  printf( "--------------------------------------------------------------------------------\n" );
+  MemAlloc::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+
+  uint32_t freed_count = 0;
+  uint32_t force_stop = 0;
+  while( freed_count < alloc_count && force_stop < alloc_count * 2 )
+  {
+    uint32_t free_idx = rand() % alloc_count;
+
+    if( free_idx_flags[free_idx] )
+    {
+      free_idx_flags[free_idx] = false;
+      MemAlloc::Free( test_ptrs2[free_idx] );
+
+      freed_count++;
+    }
+    else
+    {
+      byte_request = ( ( rand() % 512 ) * rand() ) % 1024;
+
+      test_ptrs2[free_idx] = MemAlloc::Alloc( byte_request, GenerateHint( byte_request ) );
+      free_idx_flags[free_idx] = true;
+      
+      printf( "> request %u\n", byte_request );
+    }
+    force_stop++;
+
+    printf( "--------------------------------------------------------------------------------\n" );
+    MemAlloc::PrintHeapStatus();
+    printf( "--------------------------------------------------------------------------------\n" );
+  }
+  
+  printf( "\n *** Testing Allocation func 3 ( alloc & free null )*** \n\n" );
+
+  ASSERT_F( MemAlloc::Alloc( 0 ) == nullptr, "" );
+  ASSERT_F( MemAlloc::Free( nullptr ) == false, "" );
+
+  //printf( "\n *** Testing ASSERT_F macro *** \n\n" );
+
+  //ASSERT_F( false, "Printing formatted message :: %s, %.3f, %p", "YAH", 32.1f, Foo );
 
   return 0;
+}
+
+uint32_t GenerateHint( uint32_t key )
+{
+  uint32_t hint = MemAlloc::k_HintNone;
+  
+  if( key % 2 == 0 )
+  {
+    hint = MemAlloc::k_HintStrictSize;
+    switch( key % 5 )
+    {
+      case 0:
+      {
+        hint |= MemAlloc::k_Level0;
+        break;
+      }
+      case 1:
+      {
+        hint |= MemAlloc::k_Level1;
+        break;
+      }
+      case 2:
+      {
+        hint |= MemAlloc::k_Level2;
+        break;
+      }
+      case 3:
+      {
+        hint |= MemAlloc::k_Level3;
+        break;
+      }
+      case 4:
+      {
+        hint |= MemAlloc::k_Level4;
+        break;
+      }
+      case 5:
+      {
+        hint |= MemAlloc::k_Level5;
+        break;
+      }
+    }
+  }
+
+  return hint;
 }
