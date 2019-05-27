@@ -3,7 +3,7 @@
 #include <inttypes.h>
 #include "DebugLib.h"
 
-namespace MemAlloc
+namespace Heap
 {
   enum : uint16_t // sizes of fixed allocation BucketFlags
   {
@@ -32,7 +32,7 @@ namespace MemAlloc
     uint32_t m_BHIndexNPartition;
     uint32_t m_BHAllocCount;
 #ifdef TAG_MEMORY
-    uint32_t m_BHTagHash;
+    uint64_t m_BHTagHash;
 #endif
   };
 
@@ -56,12 +56,12 @@ namespace MemAlloc
   // Data structure contains information on current state of managed memory allocations
   struct FreeList
   {
-    unsigned char* m_PartitionLvls[MemAlloc::k_NumLvl];
-    PartitionData  m_PartitionLvlDetails[MemAlloc::k_NumLvl];
+    unsigned char* m_PartitionLvls[Heap::k_NumLvl];
+    PartitionData  m_PartitionLvlDetails[Heap::k_NumLvl];
     
     BlockHeader*   m_Tracker;
-    BlockHeader    m_LargestAlloc[MemAlloc::k_NumLvl];
-    TrackerData    m_TrackerInfo[MemAlloc::k_NumLvl];
+    BlockHeader    m_LargestAlloc[Heap::k_NumLvl];
+    TrackerData    m_TrackerInfo[Heap::k_NumLvl];
 
     uint32_t       m_TotalPartitionSize;
     uint32_t       m_TotalPartitionBins;
@@ -71,15 +71,15 @@ namespace MemAlloc
   // create memory management data structures
   void  InitBase( uint32_t alloc_size = 0, uint32_t thread_id = 0 );
 
-  // hints : 
-  void* Alloc( uint32_t byte_size, uint32_t bucket_hints = k_HintNone, uint8_t block_size = 4, uint32_t thread_id = 0 );
+  // hints are an enum : k_Hint... | k_Level...
+  void* Alloc( uint32_t byte_size, uint32_t bucket_hints = k_HintNone, uint8_t block_size = 4, uint64_t debug_hash = 0, uint32_t thread_id = 0 );
 
   bool  Free( void* data_ptr, uint32_t thread_id = 0 );
   
   template<typename T>
-  T* Alloc( uint32_t byte_size )
+  T* AllocT( uint32_t count )
   {
-    return (T*)Alloc( sizeof( T ) );
+    return (T*)Alloc( sizeof( T ) * count );
   }
   
   struct QueryResult
@@ -103,8 +103,32 @@ namespace MemAlloc
 
   // Dump detailed contents of memory state
   void        PrintHeapStatus( uint32_t thread_id = 0 );
+  
 
 //----------------------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------------------
+
+  class ScopedAllocator
+  {
+  public:
+    ScopedAllocator( uint32_t thread_id = 0 ) : m_ThreadId( thread_id ) {}
+    ~ScopedAllocator();
+
+    void* Alloc( uint32_t byte_size, uint8_t block_size = 4, uint64_t debug_hash = 0 );
+
+    template< typename T >
+    T* AllocT( uint32_t count = 1, uint64_t debug_hash = 0  )
+    {
+      return (T*)Alloc( sizeof( T ) * count, 1, debug_hash );
+    }
+  private:
+    void*    m_DataPtr  = nullptr;
+    uint32_t m_ThreadId = 0;
+  };
+
+//----------------------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------------------
+  
   struct ByteFormat
   {
     enum : uint8_t

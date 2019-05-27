@@ -11,35 +11,35 @@
 #define MEM_MAX_SIZE ( 0x1 << 20 ) * 500 // 500 mb
 #endif
 
-#define SET_INDEX_PART( INDEX, PARTITION ) ( ( INDEX ) << MemAlloc::BlockHeader::k_IndexBitShift ) | PARTITION
+#define SET_INDEX_PART( INDEX, PARTITION ) ( ( INDEX ) << Heap::BlockHeader::k_IndexBitShift ) | PARTITION
 
-#define EXTRACT_IDX( BLOCK_IDX_PARTION ) ( BLOCK_IDX_PARTION >> MemAlloc::BlockHeader::k_IndexBitShift )
+#define EXTRACT_IDX( BLOCK_IDX_PARTION ) ( BLOCK_IDX_PARTION >> Heap::BlockHeader::k_IndexBitShift )
 
-#define EXTRACT_PART( BLOCK_IDX_PARTION ) ( BLOCK_IDX_PARTION & MemAlloc::BlockHeader::k_PartitionMask )
+#define EXTRACT_PART( BLOCK_IDX_PARTION ) ( BLOCK_IDX_PARTION & Heap::BlockHeader::k_PartitionMask )
 
 //static void*              s_MemBlockPtr;
-//static MemAlloc::FreeList s_FreeList;
+//static Heap::FreeList s_FreeList;
 
 struct MemoryData
 {
   void*              m_MemBlock;
-  MemAlloc::FreeList m_FreeList;
+  Heap::FreeList m_FreeList;
 };
 
 #define MAX_MEM_THREADS 8
 static MemoryData s_MemoryDataThreads[MAX_MEM_THREADS];
 
-static MemAlloc::PartitionData GetPartition( const uint32_t total_size, uint16_t bin_size, float percentage );
+static Heap::PartitionData GetPartition( const uint32_t total_size, uint16_t bin_size, float percentage );
 static uint32_t CalcAllignedAllocSize( uint32_t input, uint32_t alignment = BASE_ALIGN );
 
-static const uint32_t k_BlockHeaderSize = (uint32_t)sizeof( MemAlloc::BlockHeader );
+static const uint32_t s_BlockHeaderSize = (uint32_t)sizeof( Heap::BlockHeader );
 
-static uint16_t s_HeapBinSizes[MemAlloc::k_NumLvl] = { MemAlloc::k_Level0,
-                                                       MemAlloc::k_Level1,
-                                                       MemAlloc::k_Level2,
-                                                       MemAlloc::k_Level3,
-                                                       MemAlloc::k_Level4,
-                                                       MemAlloc::k_Level5 };
+static uint16_t s_HeapBinSizes[Heap::k_NumLvl] = { Heap::k_Level0,
+                                                   Heap::k_Level1,
+                                                   Heap::k_Level2,
+                                                   Heap::k_Level3,
+                                                   Heap::k_Level4,
+                                                   Heap::k_Level5 };
 
 // Memory layout                 Gap ( due to aligned memory ) ___
 //                                |                              |
@@ -52,7 +52,7 @@ static uint16_t s_HeapBinSizes[MemAlloc::k_NumLvl] = { MemAlloc::k_Level0,
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
 
-MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, uint32_t bucket_hint, uint32_t thread_id )
+Heap::QueryResult Heap::CalcAllocPartitionAndSize( uint32_t alloc_size, uint32_t bucket_hint, uint32_t thread_id )
 {
   QueryResult result;
   alloc_size = CalcAllignedAllocSize( alloc_size );
@@ -62,7 +62,7 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
   uint32_t chosen_bucket_idx       = 0;
   uint32_t chosen_bucket_bin_count = 0;
 
-  for( size_t i = 0, max_bins = sizeof( s_HeapBinSizes ); i < max_bins; i++ )
+  for( size_t i = 0; i < k_NumLvl && chosen_bucket < s_HeapBinSizes[k_NumLvl - 1]; i++ )
   {
     if( alloc_size <= chosen_bucket )
     {
@@ -88,10 +88,10 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
   }
 
   // update results based on chosen_bucket
-  uint32_t heap_bin = s_HeapBinSizes[chosen_bucket_idx] + k_BlockHeaderSize;
+  uint32_t heap_bin = s_HeapBinSizes[chosen_bucket_idx] + s_BlockHeaderSize;
   chosen_bucket_bin_count  = alloc_size % heap_bin ? 1 : 0;
   chosen_bucket_bin_count += alloc_size / heap_bin;
-  if( (int)( chosen_bucket_bin_count * heap_bin ) - k_BlockHeaderSize < 0 )
+  if( (int)( chosen_bucket_bin_count * heap_bin ) - s_BlockHeaderSize < 0 )
   {
     chosen_bucket_bin_count += 1;  // make sure there's room for header
   }
@@ -99,7 +99,7 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
   result.m_AllocBins = chosen_bucket_bin_count;
   result.m_Status    = chosen_bucket;
 
-  MemAlloc::FreeList& free_list = s_MemoryDataThreads[thread_id].m_FreeList;
+  Heap::FreeList& free_list = s_MemoryDataThreads[thread_id].m_FreeList;
 
   if( free_list.m_TrackerInfo[chosen_bucket_idx].m_BinOccupancy < chosen_bucket_bin_count )
   {
@@ -130,10 +130,10 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
   return result;
 }
 
-void MemAlloc::InitBase( uint32_t alloc_size, uint32_t thread_id )
+void Heap::InitBase( uint32_t alloc_size, uint32_t thread_id )
 {
-  MemAlloc::FreeList& free_list = s_MemoryDataThreads[thread_id].m_FreeList;
-  void*               mem_block = s_MemoryDataThreads[thread_id].m_MemBlock;
+  Heap::FreeList& free_list = s_MemoryDataThreads[thread_id].m_FreeList;
+  void*           mem_block = s_MemoryDataThreads[thread_id].m_MemBlock;
 
   free_list = {};
   /*
@@ -154,12 +154,12 @@ void MemAlloc::InitBase( uint32_t alloc_size, uint32_t thread_id )
   free_list.m_PartitionLvlDetails[4] = GetPartition( MEM_MAX_SIZE, k_Level4, 0.25f );
   free_list.m_PartitionLvlDetails[5] = GetPartition( MEM_MAX_SIZE, k_Level5, 0.25f );
 
-  for(uint32_t ibin = 0; ibin < MemAlloc::k_NumLvl; ibin++)
+  for(uint32_t ibin = 0; ibin < Heap::k_NumLvl; ibin++)
   {
     free_list.m_TotalPartitionSize += free_list.m_PartitionLvlDetails[ibin].m_Size;
     free_list.m_TotalPartitionBins += free_list.m_PartitionLvlDetails[ibin].m_BinCount;
   }
-  uint32_t tracker_list_size = k_BlockHeaderSize * free_list.m_TotalPartitionBins;
+  uint32_t tracker_list_size = s_BlockHeaderSize * free_list.m_TotalPartitionBins;
 
   // get heap memory from system for free list && partitions
   ASSERT_F( CalcAllignedAllocSize( tracker_list_size + free_list.m_TotalPartitionSize ) < (uint32_t)-1, 
@@ -172,7 +172,7 @@ void MemAlloc::InitBase( uint32_t alloc_size, uint32_t thread_id )
 
   // set addresses for memory tracker list & partitions
 
-  free_list.m_Tracker    = (MemAlloc::BlockHeader*)mem_block;
+  free_list.m_Tracker     = (Heap::BlockHeader*)mem_block;
   unsigned char* byte_ptr = (unsigned char*)mem_block;
   
   free_list.m_PartitionLvls[0] = byte_ptr + tracker_list_size; // offset b/c tracker list is at front
@@ -186,14 +186,14 @@ void MemAlloc::InitBase( uint32_t alloc_size, uint32_t thread_id )
 
   // initialize tracker data for each memory partition
 
-  for( uint32_t ipart_idx = 0, tracker_offsets = 0; ipart_idx < MemAlloc::k_NumLvl; ipart_idx++)
+  for( uint32_t ipart_idx = 0, tracker_offsets = 0; ipart_idx < Heap::k_NumLvl; ipart_idx++)
   {
     free_list.m_TrackerInfo[ipart_idx].m_HeadIdx      = 0;
     free_list.m_TrackerInfo[ipart_idx].m_TrackedCount = 1;
 
-    MemAlloc::BlockHeader& mem_tag = free_list.m_Tracker[tracker_offsets];
-    mem_tag.m_BHAllocCount         = free_list.m_PartitionLvlDetails[ipart_idx].m_BinCount;
-    mem_tag.m_BHIndexNPartition    = SET_INDEX_PART( 0, ipart_idx ); // partition index is encoded in lower 4 bits 
+    Heap::BlockHeader& mem_tag  = free_list.m_Tracker[tracker_offsets];
+    mem_tag.m_BHAllocCount      = free_list.m_PartitionLvlDetails[ipart_idx].m_BinCount;
+    mem_tag.m_BHIndexNPartition = SET_INDEX_PART( 0, ipart_idx ); // partition index is encoded in lower 4 bits 
 
     free_list.m_TrackerInfo[ipart_idx].m_BinOccupancy    = mem_tag.m_BHAllocCount; 
     free_list.m_TrackerInfo[ipart_idx].m_PartitionOffset = tracker_offsets;
@@ -202,7 +202,7 @@ void MemAlloc::InitBase( uint32_t alloc_size, uint32_t thread_id )
   }
 }
 
-void* MemAlloc::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_size, uint32_t thread_id )
+void* Heap::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_size, uint64_t debug_hash, uint32_t thread_id )
 {
   if ( byte_size == 0 )
   {
@@ -230,21 +230,22 @@ void* MemAlloc::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_
   }
 
   // mark && assign memory
-  const uint32_t bin_size = ( request.m_Status & ~( QueryResult::k_Success ) ) + k_BlockHeaderSize;
+
+  const uint32_t bin_size = ( request.m_Status & ~( QueryResult::k_Success ) ) + s_BlockHeaderSize;
 
   int32_t partition_idx = -1;
   for(uint32_t ipartition = 0; ipartition < k_NumLvl && partition_idx < 0; ipartition++)
   {
-    partition_idx = s_HeapBinSizes[ipartition] == ( bin_size - k_BlockHeaderSize ) ? ipartition : -1;
+    partition_idx = s_HeapBinSizes[ipartition] == ( bin_size - s_BlockHeaderSize ) ? ipartition : -1;
   }
   ASSERT_F( partition_idx >= 0, "Invalid bin size returned from CalcAllocPartitionAndSize()" );
   
-  MemAlloc::FreeList& free_list = s_MemoryDataThreads[thread_id].m_FreeList;
+  Heap::FreeList& free_list = s_MemoryDataThreads[thread_id].m_FreeList;
 
   TrackerData& free_part_info = free_list.m_TrackerInfo[partition_idx];
   BlockHeader* free_slot      = free_list.m_Tracker + ( free_part_info.m_PartitionOffset + request.m_TrackerSelectedIdx );
   
-  BlockHeader* mem_marker         = (BlockHeader*)free_list.m_PartitionLvls[partition_idx] + ( bin_size * EXTRACT_IDX( free_slot->m_BHIndexNPartition ) );
+  BlockHeader* mem_marker         = (BlockHeader*)( free_list.m_PartitionLvls[partition_idx] + ( bin_size * EXTRACT_IDX( free_slot->m_BHIndexNPartition ) ) );
   mem_marker->m_BHIndexNPartition = free_slot->m_BHIndexNPartition;
   mem_marker->m_BHAllocCount      = request.m_AllocBins;
 
@@ -262,20 +263,29 @@ void* MemAlloc::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_
     // find index of free_slot in the list
     if( free_part_info.m_TrackedCount == 1 || ( request.m_TrackerSelectedIdx + 1 ) == free_part_info.m_TrackedCount )
     {
-      memset( free_slot, 0, k_BlockHeaderSize );
+      memset( free_slot, 0, s_BlockHeaderSize );
     }
     else
     {
-      memmove( free_slot, free_slot + 1, k_BlockHeaderSize * ( free_part_info.m_TrackedCount - ( request.m_TrackerSelectedIdx + 1 ) ) );
+      memmove( free_slot, free_slot + 1, s_BlockHeaderSize * ( free_part_info.m_TrackedCount - ( request.m_TrackerSelectedIdx + 1 ) ) );
     }
     free_part_info.m_TrackedCount--;
   }
   free_part_info.m_BinOccupancy -= request.m_AllocBins;
+
+#ifdef TAG_MEMORY
+  mem_marker->m_BHTagMesh = debug_hash;
+#else
+  debug_hash = debug_hash;
+#endif // TAG_MEMORY
+
+  unsigned char* data    = (unsigned char*)mem_marker + s_BlockHeaderSize;
+                 data[0] = 1; // set value of 1st point to a number other than 0
   
-  return (unsigned char*)mem_marker + k_BlockHeaderSize; // return pointer to memory region after header
+  return data; // return pointer to memory region after header
 }
 
-bool MemAlloc::Free( void* data_ptr, uint32_t thread_id )
+bool Heap::Free( void* data_ptr, uint32_t thread_id )
 {
   // This function will maintain the invariant : each free list partition is sorted incrementally by block index
 
@@ -284,19 +294,22 @@ bool MemAlloc::Free( void* data_ptr, uint32_t thread_id )
     return false;
   }
 
-  BlockHeader* header      = (BlockHeader*)( (unsigned char*)data_ptr - k_BlockHeaderSize );
-  const uint32_t slot_idx  = header->m_BHIndexNPartition >> BlockHeader::k_IndexBitShift;
-  const uint32_t part_idx  = header->m_BHIndexNPartition & BlockHeader::k_PartitionMask;
-  const uint32_t slot_bins = header->m_BHAllocCount;
+  BlockHeader header       = *( (BlockHeader*)( (unsigned char*)data_ptr - s_BlockHeaderSize ) );
+  const uint32_t slot_idx  = header.m_BHIndexNPartition >> BlockHeader::k_IndexBitShift;
+  const uint32_t part_idx  = header.m_BHIndexNPartition & BlockHeader::k_PartitionMask;
+  const uint32_t slot_bins = header.m_BHAllocCount;
+
+  // clear marker/data once copied
+  memset( (unsigned char*)data_ptr - s_BlockHeaderSize, 0, s_BlockHeaderSize + 1 );
   
-  MemAlloc::FreeList& free_list = s_MemoryDataThreads[thread_id].m_FreeList;
+  Heap::FreeList& free_list = s_MemoryDataThreads[thread_id].m_FreeList;
 
   TrackerData& tracker_info = free_list.m_TrackerInfo[part_idx];
   BlockHeader* tracker_data = free_list.m_Tracker + tracker_info.m_PartitionOffset;
   
   if( tracker_info.m_TrackedCount == 0 ) // if free list is empty, add new slot
   {
-    *tracker_data = *header;
+    tracker_data[0] = header;
     tracker_info.m_TrackedCount++;
     return true;
   }
@@ -314,22 +327,22 @@ bool MemAlloc::Free( void* data_ptr, uint32_t thread_id )
     {
       case 0: // append
       {
-        tracker_data[tracker_idx] = *header;
+        tracker_data[tracker_idx] = header;
         break;
       }
       default: // shift then set
       {
-        memmove( tracker_data + tracker_idx + 1, tracker_data + tracker_idx, k_BlockHeaderSize * ( tracker_info.m_TrackedCount - tracker_idx ) );
-        tracker_data[tracker_idx] = *header;
+        memmove( tracker_data + tracker_idx + 1, tracker_data + tracker_idx, s_BlockHeaderSize * ( tracker_info.m_TrackedCount - tracker_idx ) );
+        tracker_data[tracker_idx] = header;
         break;
       }
     }
 
-    tracker_info.m_BinOccupancy += header->m_BHAllocCount;
+    tracker_info.m_BinOccupancy += header.m_BHAllocCount;
     tracker_info.m_TrackedCount++;
   };
 
-  if( tracker_info.m_TrackedCount == 1 ) // if free list has 1 slot, coalesce
+  if( tracker_info.m_TrackedCount == 1 ) // if free list has 1 slot, coalesce or insert
   {
     int32_t base_idx  = EXTRACT_IDX( tracker_data[0].m_BHIndexNPartition );
     int32_t base_bins = tracker_data[0].m_BHAllocCount;
@@ -368,7 +381,7 @@ bool MemAlloc::Free( void* data_ptr, uint32_t thread_id )
 
     int32_t left_dist  = (int)slot_idx - ( left_idx + left_idx_offset );
     int32_t right_dist = right_idx - (int)( slot_idx + slot_bins );
-    
+
     if( left_dist >= 0 )
     {
       if( right_dist >= 0 )
@@ -378,7 +391,7 @@ bool MemAlloc::Free( void* data_ptr, uint32_t thread_id )
           CoalesceSlot( pivot_idx, left_idx, slot_idx, slot_bins );
           tracker_data[pivot_idx].m_BHAllocCount += tracker_data[pivot_idx + 1].m_BHAllocCount;
 
-          memmove( tracker_data + pivot_idx + 1, tracker_data + pivot_idx + 2, k_BlockHeaderSize * ( tracker_info.m_TrackedCount - pivot_idx + 2 ) );
+          memmove( tracker_data + pivot_idx + 1, tracker_data + pivot_idx + 2, s_BlockHeaderSize * ( tracker_info.m_TrackedCount - pivot_idx + 2 ) );
           tracker_info.m_TrackedCount--;
           return true;
         }
@@ -437,23 +450,23 @@ bool MemAlloc::Free( void* data_ptr, uint32_t thread_id )
     }
     else
     {
-      InsertSlot( tracker_info.m_TrackedCount - 1, false );
+      InsertSlot( tracker_info.m_TrackedCount, false );
     }
   }
 
   return true;
 }
 
-void MemAlloc::PrintHeapStatus( uint32_t thread_id )
+void Heap::PrintHeapStatus( uint32_t thread_id )
 {
-  MemAlloc::FreeList& free_list = s_MemoryDataThreads[thread_id].m_FreeList;
+  Heap::FreeList& free_list = s_MemoryDataThreads[thread_id].m_FreeList;
 
   // Total allocated memory
-  ByteFormat b_data = TranslateByteFormat( free_list.m_TotalPartitionSize + k_BlockHeaderSize * free_list.m_TotalPartitionBins, ByteFormat::k_Byte );
+  ByteFormat b_data = TranslateByteFormat( free_list.m_TotalPartitionSize + s_BlockHeaderSize * free_list.m_TotalPartitionBins, ByteFormat::k_Byte );
   printf( "o Total allocated heap memory : %10.3f %2s\n", b_data.m_Size, b_data.m_Type  );
   b_data = TranslateByteFormat( free_list.m_TotalPartitionSize, ByteFormat::k_Byte );
   printf( "  - Total partition sizes     : %10.3f %2s\n", b_data.m_Size, b_data.m_Type );
-  b_data = TranslateByteFormat( k_BlockHeaderSize * free_list.m_TotalPartitionBins, ByteFormat::k_Byte );
+  b_data = TranslateByteFormat( s_BlockHeaderSize * free_list.m_TotalPartitionBins, ByteFormat::k_Byte );
   printf( "  - Tracker list size         : %10.3f %2s\n", b_data.m_Size, b_data.m_Type );
   
   // Partition characteristics
@@ -503,7 +516,7 @@ void MemAlloc::PrintHeapStatus( uint32_t thread_id )
   }
 }
 
-MemAlloc::ByteFormat MemAlloc::TranslateByteFormat( uint32_t size, uint8_t byte_type )
+Heap::ByteFormat Heap::TranslateByteFormat( uint32_t size, uint8_t byte_type )
 {
   if( byte_type == ByteFormat::k_Byte )
   {
@@ -531,20 +544,34 @@ MemAlloc::ByteFormat MemAlloc::TranslateByteFormat( uint32_t size, uint8_t byte_
 //***********************************************************************************************
 //***********************************************************************************************
 
+Heap::ScopedAllocator::~ScopedAllocator()
+{
+  Heap::Free( m_DataPtr, m_ThreadId );
+}
+
+void* Heap::ScopedAllocator::Alloc( uint32_t byte_size, uint8_t block_size, uint64_t debug_hash )
+{
+  m_DataPtr = Heap::Alloc( byte_size, Heap::k_HintNone, block_size, debug_hash, m_ThreadId );
+  return m_DataPtr;
+}
+
+//***********************************************************************************************
+//***********************************************************************************************
+
 // Size of partition is restricted by 2 factors: freelist tracker && block header
 // * Each bin in the partition must support a blockheader
 // * Each bin in the partition must be possibly represented by a tracker in the free list
-static MemAlloc::PartitionData GetPartition( const uint32_t total_size, uint16_t bin_size, float percentage )
+static Heap::PartitionData GetPartition( const uint32_t total_size, uint16_t bin_size, float percentage )
 {
-  MemAlloc::PartitionData part_output;
+  Heap::PartitionData part_output;
 
   uint32_t fixed_part_size = CalcAllignedAllocSize( (uint32_t)( (double)total_size * (double)percentage ) );
 
-  part_output.m_BinSize  = bin_size + k_BlockHeaderSize;
-  // m_BinCount calculation : k_BlockHeaderSize is added to the denominator because each bin needs
+  part_output.m_BinSize  = bin_size + s_BlockHeaderSize;
+  // m_BinCount calculation : s_BlockHeaderSize is added to the denominator because each bin needs
   // a corresponding tracker in the free list. This calculation saves space for the resulting free
   // list tracking array
-  part_output.m_BinCount = fixed_part_size / ( part_output.m_BinSize + k_BlockHeaderSize ); 
+  part_output.m_BinCount = fixed_part_size / ( part_output.m_BinSize + s_BlockHeaderSize ); 
   part_output.m_Size     = part_output.m_BinCount * part_output.m_BinSize;
 
   return part_output;

@@ -20,236 +20,377 @@ void Foo()
   Bar();
 }
 
-uint32_t GenerateHint( uint32_t key );
+static void PrintAllocCalcResult( uint32_t alloc_size, uint32_t hints );
 
-void PrintAllocCalcResult( uint32_t alloc_size, uint32_t hints )
-{
-  printf( "o CalcAllocPartitionAndSize:\n" );
-  if( hints & MemAlloc::k_HintStrictSize )
-  {
-    MemAlloc::ByteFormat b_data = TranslateByteFormat( hints & ~MemAlloc::k_HintStrictSize, MemAlloc::ByteFormat::k_Byte );
-    printf( "  - Strict size hint : %4.2f %2s\n", b_data.m_Size, b_data.m_Type );
-  }
-  
-  MemAlloc::QueryResult query = MemAlloc::CalcAllocPartitionAndSize( alloc_size, hints );
+static uint32_t GenerateHint( uint32_t key );
 
-  printf( "  Status     : %s\n",  query.m_Status & MemAlloc::QueryResult::k_Success ? "Success" : 
-                                  query.m_Status & MemAlloc::QueryResult::k_NoFreeSpace ? "No free space" :
-                                  query.m_Status & MemAlloc::QueryResult::k_ExcessFragmentation ? "Fragmentation" : "unknown" );
-  printf( "  Alloc bins : %u\n",  query.m_AllocBins );
+static void DumpMemory( void* ptrs[], bool ptr_flags[], uint32_t num_allocs );
 
-  uint32_t partition = query.m_Status &= ~( MemAlloc::QueryResult::k_Success | MemAlloc::QueryResult::k_NoFreeSpace | MemAlloc::QueryResult::k_ExcessFragmentation );
-  printf( "  Block      : %u B\n", partition );
-}
+static int32_t Test1();
+static int32_t Test2();
+static int32_t Test3();
+static int32_t Test4();
+static int32_t Test5();
+static int32_t Test6();
+static int32_t Test7();
 
 int main( const int argc, const char* argv[] )
 {
-  (void*)argc;
-  (void*)argv;
 
   RegisterExeForStackTrace( "memalloc_test" );
-
-  printf( "\n *** Testing call stack dump *** \n\n" );
-
-  Foo();
   
-  printf( "\n *** Testing memory allocator initialization *** \n\n" );
+  Heap::InitBase();
 
-  MemAlloc::InitBase();
-
-  MemAlloc::PrintHeapStatus();
-
-  printf( "\n *** Testing CalcAllocPartitionAndSize func *** \n\n" );
-
-  srand( (unsigned int)time( nullptr ) );
-  uint32_t byte_request = ( ( rand() % 512 ) * rand() ) % 512;
-  printf( "Requesting %u bytes \n", byte_request );
-
-  PrintAllocCalcResult( byte_request, MemAlloc::k_HintNone );
-  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level4 );
-  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level2 );
-  PrintAllocCalcResult( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
-
-  printf( "\n *** Testing Allocation func *** \n\n" );
-
-  void* test_ptrs[5]; 
-  printf( "\n*** Bang ***\n" );
-  test_ptrs[0] = MemAlloc::Alloc( byte_request );
-  printf( "\n*** Bang ***\n" );
-  test_ptrs[1] = MemAlloc::Alloc( byte_request );
-  printf( "\n*** Bang ***\n" );
-  test_ptrs[2] = MemAlloc::Alloc( byte_request );
-  printf( "\n*** Bang ***\n" );
-  test_ptrs[3] = MemAlloc::Alloc( byte_request, MemAlloc::k_HintStrictSize | MemAlloc::k_Level0 );
-
-  MemAlloc::Free( test_ptrs[1] );
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::PrintHeapStatus();
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::Free( test_ptrs[3] );
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::PrintHeapStatus();
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::Free( test_ptrs[0] );
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::PrintHeapStatus();
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::Free( test_ptrs[2] );
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::PrintHeapStatus();
-  printf( "--------------------------------------------------------------------------------\n" );
-
-  printf( "\n *** Testing Allocation func 2 *** \n\n" );
-
-  const uint32_t alloc_count = 5000;
-  void*          test_ptrs2[alloc_count];
-  bool           free_idx_flags[alloc_count];
-  
-  for( uint32_t irequest = 0; irequest < alloc_count; ++irequest )
+  if( argc == 2 )
   {
-    byte_request = ( ( rand() % 512 ) * rand() ) % 800;
-
-    // randomize hints
-    test_ptrs2[irequest] = MemAlloc::Alloc( byte_request, GenerateHint( byte_request ) );
-    free_idx_flags[irequest] = true;
-    
-    // printf( "> request %u\n", byte_request );
-  }
-  
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::PrintHeapStatus();
-  printf( "--------------------------------------------------------------------------------\n" );
-
-  uint32_t freed_count = 0;
-  uint32_t force_stop = 0;
-  while( freed_count < alloc_count && force_stop < alloc_count * 2 )
-  {
-    uint32_t free_idx = rand() % alloc_count;
-
-    if( free_idx_flags[free_idx] )
+    switch ( *argv[1] )
     {
-      free_idx_flags[free_idx] = false;
-      MemAlloc::Free( test_ptrs2[free_idx] );
-
-      freed_count++;
-    }
-    else
-    {
-      byte_request = ( ( rand() % 512 ) * rand() ) % 800;
-
-      test_ptrs2[free_idx] = MemAlloc::Alloc( byte_request, GenerateHint( byte_request ) );
-      free_idx_flags[free_idx] = test_ptrs2[free_idx] ? true : false;
-      
-      // printf( "> request %u\n", byte_request );
-    }
-    force_stop++;
-  }
-
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::PrintHeapStatus();
-  printf( "--------------------------------------------------------------------------------\n" );
-  
-  printf( "\n *** Testing Allocation func 3 ( alloc & free null )*** \n\n" );
-
-  ASSERT_F( MemAlloc::Alloc( 0 ) == nullptr, "" );
-  ASSERT_F( MemAlloc::Free( nullptr ) == false, "" );
-
-  printf( "\n *** Testing Allocation func 4 *** \n\n" );
-  
-  for( uint32_t irequest = 0; irequest < alloc_count; ++irequest )
-  {
-    if( free_idx_flags[irequest] )
-    {
-      free_idx_flags[irequest] = false;
-      MemAlloc::Free( test_ptrs2[irequest] );
+      case '1':
+      {
+        return Test1();
+      }
+      case '2':
+      {
+        return Test2();
+      }
+      case '3':
+      {
+        return Test3();
+      }
+      case '4':
+      {
+        return Test4();
+      }
+      case '5':
+      {
+        return Test5();
+      }
+      case '6':
+      {
+        return Test6();
+      }
+      case '7':
+      {
+        return Test7();
+      }
     }
   }
 
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::PrintHeapStatus();
-  printf( "--------------------------------------------------------------------------------\n" );
-
-  const uint32_t alloc_count2 = alloc_count * 10;
-  void* test_ptrs3[alloc_count2];
-  bool  free_idx_flags2[alloc_count2];
-  for( uint32_t irequest = 0; irequest < alloc_count2; ++irequest )
-  {
-    byte_request = ( ( rand() % 512 ) * rand() ) % 4096;
-
-    // randomize hints
-    test_ptrs3[irequest] = MemAlloc::Alloc( byte_request, GenerateHint( byte_request ) );
-    free_idx_flags2[irequest] = test_ptrs3[irequest] ? true : false;
-    
-    // printf( "> request %u\n", byte_request );
-  }
-
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::PrintHeapStatus();
-  printf( "--------------------------------------------------------------------------------\n" );
+  Test1();
   
-  for( uint32_t irequest = 0; irequest < alloc_count2; ++irequest )
-  {
-    uint32_t free_idx = rand() % alloc_count2;
+  Test2();
 
-    if( free_idx_flags2[free_idx] )
-    {
-      free_idx_flags2[free_idx] = false;
-      MemAlloc::Free( test_ptrs3[free_idx] );
-    }
-  }
-  
-  printf( "--------------------------------------------------------------------------------\n" );
-  MemAlloc::PrintHeapStatus();
-  printf( "--------------------------------------------------------------------------------\n" );
+  Test3();
 
-  //printf( "\n *** Testing ASSERT_F macro *** \n\n" );
+  Test4();
 
-  //ASSERT_F( false, "Printing formatted message :: %s, %.3f, %p", "YAH", 32.1f, Foo );
+  Test5();
+
+  Test6();
+
+  Test7();
 
   return 0;
 }
 
-uint32_t GenerateHint( uint32_t key )
+static void PrintAllocCalcResult( uint32_t alloc_size, uint32_t hints )
 {
-  uint32_t hint = MemAlloc::k_HintNone;
+  printf( "o CalcAllocPartitionAndSize:\n" );
+  if( hints & Heap::k_HintStrictSize )
+  {
+    Heap::ByteFormat b_data = TranslateByteFormat( hints & ~Heap::k_HintStrictSize, Heap::ByteFormat::k_Byte );
+    printf( "  - Strict size hint : %4.2f %2s\n", b_data.m_Size, b_data.m_Type );
+  }
+  
+  Heap::QueryResult query = Heap::CalcAllocPartitionAndSize( alloc_size, hints );
+
+  printf( "  Status     : %s\n",  query.m_Status & Heap::QueryResult::k_Success ? "Success" : 
+                                  query.m_Status & Heap::QueryResult::k_NoFreeSpace ? "No free space" :
+                                  query.m_Status & Heap::QueryResult::k_ExcessFragmentation ? "Fragmentation" : "unknown" );
+  printf( "  Alloc bins : %u\n",  query.m_AllocBins );
+
+  uint32_t partition = query.m_Status &= ~( Heap::QueryResult::k_Success | Heap::QueryResult::k_NoFreeSpace | Heap::QueryResult::k_ExcessFragmentation );
+  printf( "  Block      : %u B\n", partition );
+}
+
+static uint32_t GenerateHint( uint32_t key )
+{
+  uint32_t hint = Heap::k_HintNone;
   
   if( key % 2 == 0 )
   {
-    hint = MemAlloc::k_HintStrictSize;
+    hint = Heap::k_HintStrictSize;
     switch( key % 5 )
     {
       case 0:
       {
-        hint |= MemAlloc::k_Level0;
+        hint |= Heap::k_Level0;
         break;
       }
       case 1:
       {
-        hint |= MemAlloc::k_Level1;
+        hint |= Heap::k_Level1;
         break;
       }
       case 2:
       {
-        hint |= MemAlloc::k_Level2;
+        hint |= Heap::k_Level2;
         break;
       }
       case 3:
       {
-        hint |= MemAlloc::k_Level3;
+        hint |= Heap::k_Level3;
         break;
       }
       case 4:
       {
-        hint |= MemAlloc::k_Level4;
+        hint |= Heap::k_Level4;
         break;
       }
       case 5:
       {
-        hint |= MemAlloc::k_Level5;
+        hint |= Heap::k_Level5;
         break;
       }
     }
   }
 
   return hint;
+}
+
+static void DumpMemory( void* ptrs[], bool ptr_flags[], uint32_t num_allocs )
+{
+  for( uint32_t iptr = 0; iptr < num_allocs; ++iptr )
+  {
+    if( ptr_flags[iptr] )
+    {
+      ptr_flags[iptr] = false;
+      Heap::Free( ptrs[iptr] );
+    }
+  }
+}
+
+static int32_t Test1()
+{
+  printf( "\n *** Testing call stack dump *** \n\n" );
+
+  Foo();
+
+  return 0;
+}
+
+static int32_t Test2()
+{
+  printf( "\n *** Testing CalcAllocPartitionAndSize func *** \n\n" );
+
+  srand( (unsigned int)time( nullptr ) );
+  uint32_t byte_request = ( ( rand() % 512 ) * rand() ) % 512;
+  printf( "Requesting %u bytes \n", byte_request );
+
+  PrintAllocCalcResult( byte_request, Heap::k_HintNone );
+  PrintAllocCalcResult( byte_request, Heap::k_HintStrictSize | Heap::k_Level4 );
+  PrintAllocCalcResult( byte_request, Heap::k_HintStrictSize | Heap::k_Level2 );
+  PrintAllocCalcResult( byte_request, Heap::k_HintStrictSize | Heap::k_Level0 );
+
+  return 0;
+}
+
+static int32_t Test3()
+{
+  srand( (unsigned int)time( nullptr ) );
+  uint32_t byte_request = ( ( rand() % 512 ) * rand() ) % 512;
+
+  printf( "\n *** Testing Allocation func ( 4 simple allocations & frees ) *** \n\n" );
+
+  void* test_ptrs[5]; 
+  printf( "o Alloc 1 | hint : Heap::k_HintNone                              | %u B\n", byte_request );
+  test_ptrs[0] = Heap::Alloc( byte_request );
+  printf( "o Alloc 2 | hint : Heap::k_HintStrictSize | Heap::k_Level4 | %u B\n", byte_request );
+  test_ptrs[1] = Heap::Alloc( byte_request, Heap::k_HintStrictSize | Heap::k_Level4 );
+  printf( "o Alloc 3 | hint : Heap::k_HintStrictSize | Heap::k_Level2 | %u B\n", byte_request );
+  test_ptrs[2] = Heap::Alloc( byte_request, Heap::k_HintStrictSize | Heap::k_Level2 );
+  printf( "o Alloc 4 | hint : Heap::k_HintStrictSize | Heap::k_Level0 | %u B\n", byte_request );
+  test_ptrs[3] = Heap::Alloc( byte_request, Heap::k_HintStrictSize | Heap::k_Level0 );
+
+  printf( "--------------------------------------------------------------------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+  Heap::Free( test_ptrs[1] );
+  Heap::Free( test_ptrs[3] );
+  Heap::Free( test_ptrs[0] );
+  Heap::Free( test_ptrs[2] );
+  printf( "--------------------------------------------------------------------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+
+  return 0;
+}
+
+static int32_t Test4()
+{
+  srand( (unsigned int)time( nullptr ) );
+  uint32_t byte_request = ( ( rand() % 512 ) * rand() ) % 512;
+
+  const uint32_t alloc_count = 1000000;
+  printf( "\n *** Testing Allocation func ( %u allocations and random-ordered frees ) *** \n\n", alloc_count );
+
+  void** test_ptrs      = Heap::AllocT<void*>( alloc_count );
+  bool*  free_idx_flags = Heap::AllocT<bool>( alloc_count );
+  
+  printf( "----------------------------State bfore allocations----------------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "-------------------------------------------------------------------------------\n" );
+  
+  for( uint32_t irequest = 0; irequest < alloc_count; ++irequest )
+  {
+    byte_request = ( ( rand() % 512 ) * rand() ) % 4096; // randomize sizes
+
+    test_ptrs[irequest]      = Heap::Alloc( byte_request, GenerateHint( byte_request ) ); // randomize hints
+    free_idx_flags[irequest] = true;
+  }
+  
+  printf( "-----------------------------State after allocations----------------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "----------------------------Randomizing free & alloc----------------------------\n" );
+
+  uint32_t freed_count = 0;
+  uint32_t force_stop = 0;
+  while( freed_count < alloc_count && force_stop < alloc_count * 3 )
+  {
+    uint32_t free_idx = rand() % alloc_count;
+
+    if( free_idx_flags[free_idx] )
+    {
+      Heap::Free( test_ptrs[free_idx] );
+      free_idx_flags[free_idx] = false;
+
+      freed_count++;
+    }
+    else if( free_idx % 100 == 0 ) // 1 out of 100 chance of alloc
+    {
+      byte_request = ( ( rand() % 512 ) * rand() ) % 4096;
+
+      test_ptrs[free_idx]      = Heap::Alloc( byte_request, GenerateHint( byte_request ) );
+      free_idx_flags[free_idx] = test_ptrs[free_idx] ? true : false;
+    }
+    force_stop++;
+  }
+
+  printf( "------------------------State after randomized free & alloc---------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+  
+  DumpMemory( test_ptrs, free_idx_flags, alloc_count );
+
+  printf( "----------------------------State after memory dump-----------------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+  
+  return 0;
+}
+
+static int32_t Test5()
+{
+  printf( "\n *** Testing Allocation func ( alloc( 0 ) & free( null ) ) w/ asserts *** \n\n" );
+
+  ASSERT_F( Heap::Alloc( 0 ) == nullptr, "" );
+  ASSERT_F( Heap::Free( nullptr ) == false, "" );
+
+  return 0;
+}
+
+static int32_t Test6()
+{
+  srand( (unsigned int)time( nullptr ) );
+  uint32_t byte_request = ( ( rand() % 512 ) * rand() ) % 512;
+
+  const uint32_t alloc_count = 100000 * 100;
+  printf( "\n *** Testing Allocation func ( %u allocations and random-ordered frees ) *** \n\n", alloc_count );
+
+  void** test_ptrs      = Heap::AllocT<void*>( alloc_count );
+  bool*  free_idx_flags = Heap::AllocT<bool>( alloc_count );
+
+  ASSERT_F( *test_ptrs && *free_idx_flags, "Failed to allocate testing containers" );
+
+  printf( "-----------------------State before randomized free & alloc---------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+
+  for( uint32_t irequest = 0; irequest < alloc_count; ++irequest )
+  {
+    byte_request = ( ( rand() % 512 ) * rand() ) % 8192;
+
+    // randomize hints
+    test_ptrs[irequest]      = Heap::Alloc( byte_request, GenerateHint( byte_request ) );
+    free_idx_flags[irequest] = test_ptrs[irequest] ? true : false;
+  }
+
+  printf( "------------------------------State after allocations---------------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+  
+  uint32_t freed_count = 0;
+  for( uint32_t irequest = 0; irequest < alloc_count * 5 && freed_count < alloc_count; ++irequest )
+  {
+    uint32_t free_idx = rand() % alloc_count;
+
+    if( free_idx_flags[free_idx] )
+    {
+      free_idx_flags[free_idx] = false;
+      Heap::Free( test_ptrs[free_idx] );
+
+      freed_count++;
+    }
+  }
+  
+  printf( "-----------------------------State after randomized free------------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+  
+  DumpMemory( test_ptrs, free_idx_flags, alloc_count );
+  
+  printf( "----------------------------------State after dump------------------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+
+  return 0;
+}
+
+static int32_t Test7()
+{
+  srand( (unsigned int)time( nullptr ) );
+  printf( "\n *** Testing Scoped Allocation *** \n\n" );
+
+  {
+    Heap::ScopedAllocator allocator;
+
+    uint32_t count = ( rand() % 200 ) + 10;
+
+    printf( "Scoped alloc array size : %u\n\n", count );
+    int32_t* values = allocator.AllocT< int32_t >( count );
+
+    printf( "Playing w/ scoped values %u\n\n", count );
+
+    for( uint32_t scope_idx = 0; scope_idx < count; scope_idx++ )
+    {
+      values[scope_idx] = rand();
+    }
+    for( uint32_t scope_idx = 0; scope_idx < count; scope_idx++ )
+    {
+      printf( "- Scope val[%u] = %d\n", scope_idx, values[scope_idx] );
+    }
+    printf( "\n\n" );
+    
+    printf( "---------------------------------scope in---------------------------------------\n" );
+    Heap::PrintHeapStatus();
+    printf( "---------------------------------scope in---------------------------------------\n" );
+
+    printf( "Exiting scope\n\n" );
+  }
+
+  printf( "--------------------------------------------------------------------------------\n" );
+  Heap::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+
+  return 0;
 }
