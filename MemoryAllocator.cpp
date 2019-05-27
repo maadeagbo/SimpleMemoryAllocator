@@ -59,7 +59,6 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
     {
       break;
     }
-
     chosen_bucket = chosen_bucket << 1;
     chosen_bucket_idx++;
   }
@@ -76,7 +75,6 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
         chosen_bucket_idx = ibin;
       }
     }
-
     chosen_bucket = max_bucket ? max_bucket : chosen_bucket;
   }
 
@@ -86,15 +84,12 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
   chosen_bucket_bin_count += alloc_size / heap_bin;
   if( (int)( chosen_bucket_bin_count * heap_bin ) - k_BlockHeaderSize < 0 )
   {
-    printf("-- %d\n", chosen_bucket_bin_count * heap_bin);
     chosen_bucket_bin_count += 1;  // make sure there's room for header
   }
 
   result.m_AllocBins = chosen_bucket_bin_count;
   result.m_Status    = chosen_bucket;
 
-  // check partition for free space
-  
   if( s_FreeList.m_TrackerInfo[chosen_bucket_idx].m_BinOccupancy < chosen_bucket_bin_count )
   {
     result.m_Status |= QueryResult::k_NoFreeSpace;
@@ -127,14 +122,14 @@ MemAlloc::QueryResult MemAlloc::CalcAllocPartitionAndSize( uint32_t alloc_size, 
 void MemAlloc::InitBase()
 {
   s_FreeList = {};
-  // Partition scheme :
-  //    k_Level0 :  5%
-  //    k_Level1 : 10%
-  //    k_Level2 : 15%
-  //    k_Level3 : 20%
-  //    k_Level4 : 25%
-  //    k_Level5 : 25%
-
+  /*
+  o Partition scheme :
+  ===============================================================================
+  |  k_Level0  |  k_Level1  |  k_Level2  |  k_Level3  |  k_Level4  |  k_Level5  |
+  |     5%     |    10%     |    15%     |    20%     |    25%     |    25%     |
+  ===============================================================================
+  */
+  
   // calculate partition stats per memory level
   s_FreeList.m_PartitionLvlDetails[0] = GetPartition( MEM_MAX_SIZE, k_Level0, 0.05f );
   s_FreeList.m_PartitionLvlDetails[1] = GetPartition( MEM_MAX_SIZE, k_Level1, 0.10f );
@@ -175,19 +170,19 @@ void MemAlloc::InitBase()
 
   // initialize tracker data for each memory partition
 
-  for(uint32_t itracker_idx = 0, tracker_offsets = 0; itracker_idx < MemAlloc::k_NumLvl; itracker_idx++)
+  for( uint32_t ipart_idx = 0, tracker_offsets = 0; ipart_idx < MemAlloc::k_NumLvl; ipart_idx++)
   {
-    s_FreeList.m_TrackerInfo[itracker_idx].m_HeadIdx      = 0;
-    s_FreeList.m_TrackerInfo[itracker_idx].m_TrackedCount = 1;
+    s_FreeList.m_TrackerInfo[ipart_idx].m_HeadIdx      = 0;
+    s_FreeList.m_TrackerInfo[ipart_idx].m_TrackedCount = 1;
 
     MemAlloc::BlockHeader& mem_tag = s_FreeList.m_Tracker[tracker_offsets];
-    mem_tag.m_BHAllocCount         = s_FreeList.m_PartitionLvlDetails[itracker_idx].m_BinCount;
-    mem_tag.m_BHIndexNPartition    = itracker_idx; // partition index is encoded in lower 4 bits 
+    mem_tag.m_BHAllocCount         = s_FreeList.m_PartitionLvlDetails[ipart_idx].m_BinCount;
+    mem_tag.m_BHIndexNPartition    = SET_INDEX_PART( 0, ipart_idx ); // partition index is encoded in lower 4 bits 
 
-    s_FreeList.m_TrackerInfo[itracker_idx].m_BinOccupancy    = mem_tag.m_BHAllocCount; 
-    s_FreeList.m_TrackerInfo[itracker_idx].m_PartitionOffset = tracker_offsets;
+    s_FreeList.m_TrackerInfo[ipart_idx].m_BinOccupancy    = mem_tag.m_BHAllocCount; 
+    s_FreeList.m_TrackerInfo[ipart_idx].m_PartitionOffset = tracker_offsets;
 
-    tracker_offsets += s_FreeList.m_PartitionLvlDetails[itracker_idx].m_BinCount;
+    tracker_offsets += s_FreeList.m_PartitionLvlDetails[ipart_idx].m_BinCount;
   }
 }
 
@@ -197,17 +192,10 @@ void* MemAlloc::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_
   {
     return nullptr; // maybe trigger assert(?)
   }
-
-  // block_size needs to even & divisible by 4 bytes
-  ASSERT_F( block_size % 4 == 0,
-            "Alloc only accepts 4 byte alligned block sizes (%u)",
-            block_size );
   
   uint32_t aligned_alloc = CalcAllignedAllocSize( byte_size, block_size );
 
   QueryResult request = CalcAllocPartitionAndSize( aligned_alloc, bucket_hints );
-
-  // handle allocation failures
 
   if( !( request.m_Status & QueryResult::k_Success ) )
   {
@@ -215,22 +203,12 @@ void* MemAlloc::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_
     {
       ASSERT_F( false, "Failed to allocate memory based on request" );
     }
-    else
-    {
-      // re-attempt allocating memory by cycling thru each partition
-      for(uint32_t ipartition = 0; ipartition < sizeof( s_HeapBinSizes ) && !( request.m_Status & QueryResult::k_Success ); ipartition++)
-      {
-        request = CalcAllocPartitionAndSize( aligned_alloc, k_HintStrictSize | s_HeapBinSizes[ipartition] );
-      }
-
-      ASSERT_F( request.m_Status & QueryResult::k_Success, "Unknown failure when attempting to allocate memory" );
-    }
+    ASSERT_F( !( request.m_Status & QueryResult::k_NoFreeSpace ), "Failure when attempting to allocate memory. No free space" );
+    ASSERT_F( !( request.m_Status & QueryResult::k_ExcessFragmentation ), "Failure when attempting to allocate memory duevto fragmentation" );
   }
 
   // mark && assign memory
   const uint32_t bin_size = ( request.m_Status & ~( QueryResult::k_Success ) ) + k_BlockHeaderSize;
-
-  ASSERT_F( bin_size > k_BlockHeaderSize, "Missing bin size returned from CalcAllocPartitionAndSize()" );
 
   int32_t partition_idx = -1;
   for(uint32_t ipartition = 0; ipartition < k_NumLvl && partition_idx < 0; ipartition++)
@@ -242,23 +220,11 @@ void* MemAlloc::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_
   TrackerData& free_part_info = s_FreeList.m_TrackerInfo[partition_idx];
   BlockHeader* free_slot      = s_FreeList.m_Tracker + ( free_part_info.m_PartitionOffset + request.m_TrackerSelectedIdx );
   
-  printf( "- Free Slot : index %u, alloc count %u\n", EXTRACT_IDX( free_slot->m_BHIndexNPartition ), free_slot->m_BHAllocCount );
-
   BlockHeader* mem_marker         = (BlockHeader*)s_FreeList.m_PartitionLvls[partition_idx] + ( bin_size * EXTRACT_IDX( free_slot->m_BHIndexNPartition ) );
   mem_marker->m_BHIndexNPartition = free_slot->m_BHIndexNPartition;
   mem_marker->m_BHAllocCount      = request.m_AllocBins;
 
-  // update free memory list : free memory slots & m_BinOccupancy in selected partition
-  
-  printf( "%u partition ( %u ) :: free bins %u, alloc'd bins %u (%u B)\n",
-          bin_size - k_BlockHeaderSize,
-          partition_idx,
-          free_part_info.m_BinOccupancy,
-          mem_marker->m_BHAllocCount,
-          bin_size * mem_marker->m_BHAllocCount );
-
   // subtract & update || remove free slot from list
-  
   if( free_slot->m_BHAllocCount > request.m_AllocBins )
   {
     free_slot->m_BHAllocCount -= request.m_AllocBins;
@@ -266,17 +232,10 @@ void* MemAlloc::Alloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_
              index            += request.m_AllocBins;
 
     free_slot->m_BHIndexNPartition = SET_INDEX_PART( index, partition_idx );
-
-    printf( "- Modified free space : %u (%u)\n",
-            EXTRACT_IDX( free_slot->m_BHIndexNPartition ),
-            free_slot->m_BHAllocCount );
   }
   else
   {
-    // - find index of free_slot in the list
-    //    - if its the only thing in the list         : decrement the count
-    //    - if its at the end of the list             : decrement the count
-    //    - if its in the middle | front of the list  : shift list shorter by k_BlockHeaderSize w/ memmove
+    // find index of free_slot in the list
     if( free_part_info.m_TrackedCount == 1 || ( request.m_TrackerSelectedIdx + 1 ) == free_part_info.m_TrackedCount )
     {
       memset( free_slot, 0, k_BlockHeaderSize );
@@ -301,58 +260,41 @@ bool MemAlloc::Free( void* data_ptr )
     return false;
   }
 
-  printf( "\nFree\n" );
-
-  // grab block header and partition index
   BlockHeader* header      = (BlockHeader*)( (unsigned char*)data_ptr - k_BlockHeaderSize );
   const uint32_t slot_idx  = header->m_BHIndexNPartition >> BlockHeader::k_IndexBitShift;
   const uint32_t part_idx  = header->m_BHIndexNPartition & BlockHeader::k_PartitionMask;
   const uint32_t slot_bins = header->m_BHAllocCount;
-  printf( "o Header : index %u, bins %u, partition %u\n", slot_idx, slot_bins, part_idx );
 
   TrackerData& tracker_info = s_FreeList.m_TrackerInfo[part_idx];
   BlockHeader* tracker_data = s_FreeList.m_Tracker + tracker_info.m_PartitionOffset;
   
-  // attempt to free/coalesce memory region
-
-  // - check if free list is empty. If so, add new slot
-  if( tracker_info.m_TrackedCount == 0 )
+  if( tracker_info.m_TrackedCount == 0 ) // if free list is empty, add new slot
   {
     *tracker_data = *header;
     tracker_info.m_TrackedCount++;
-
     return true;
   }
 
   auto CoalesceSlot = [&tracker_info, &tracker_data]( uint32_t tracker_idx, uint32_t base_idx, uint32_t coalesce_idx, uint32_t coalesce_bins )
   {
-    printf( "o merging %u( bin count %u ) --> %u\n", coalesce_idx, coalesce_bins, base_idx);
-    (void*)tracker_idx;
-
     tracker_data[tracker_idx].m_BHIndexNPartition  = SET_INDEX_PART( base_idx < coalesce_idx ? base_idx : coalesce_idx, EXTRACT_PART( tracker_data[tracker_idx].m_BHIndexNPartition ) );
     tracker_data[tracker_idx].m_BHAllocCount      += coalesce_bins;
-
-    tracker_info.m_BinOccupancy += coalesce_bins;
+    tracker_info.m_BinOccupancy                   += coalesce_bins;
   };
 
-  auto InsertShot = [&tracker_info, &tracker_data, &header]( uint32_t tracker_idx, uint32_t base_idx, bool shift_right )
+  auto InsertSlot = [&tracker_info, &tracker_data, &header]( uint32_t tracker_idx, bool shift_right )
   {
     switch( (int)shift_right )
     {
       case 0: // append
       {
-        printf( "o appending %u\n", base_idx );
         tracker_data[tracker_idx] = *header;
-
         break;
       }
       default: // shift then set
       {
-        printf( "o inserting %u at index %u\n", base_idx, tracker_idx );
-
         memmove( tracker_data + tracker_idx + 1, tracker_data + tracker_idx, k_BlockHeaderSize * ( tracker_info.m_TrackedCount - tracker_idx ) );
         tracker_data[tracker_idx] = *header;
-
         break;
       }
     }
@@ -361,8 +303,7 @@ bool MemAlloc::Free( void* data_ptr )
     tracker_info.m_TrackedCount++;
   };
 
-  // - check if free list has 1 slot
-  if( tracker_info.m_TrackedCount == 1 )
+  if( tracker_info.m_TrackedCount == 1 ) // if free list has 1 slot, coalesce
   {
     int32_t base_idx  = EXTRACT_IDX( tracker_data[0].m_BHIndexNPartition );
     int32_t base_bins = tracker_data[0].m_BHAllocCount;
@@ -377,38 +318,31 @@ bool MemAlloc::Free( void* data_ptr )
     {
       if( head_dist > 0 )
       {
-        InsertShot( 0, slot_idx, true ); // new head
+        InsertSlot( 0, true ); // new head
       }
       else
       {
-        InsertShot( 1, slot_idx, false); // append
+        InsertSlot( 1, false); // append
       }
     }
 
     return true;
   }
   
-  // - use divide & conquer to find its spot in list ( using index as pivot )
-  //   - if index is +-1 from the free slot either in front or back of it, coalesce
-  //   - if can't coalesce, shift list to the right & insert reclaimed memory
-  int32_t head       = 0;
-  int32_t tail       = tracker_info.m_TrackedCount - 1;
-  while( (int)( tail - head ) > 0 )
+  // - use divide & conquer to find its spot in list
+  int32_t head = 0;
+  int32_t tail = tracker_info.m_TrackedCount - 1;
+  while( ( tail - head ) > 0 )
   {
     uint32_t pivot_idx = head + ( ( tail - head ) / 2 );
-    printf( "--size %u (%u : %u) pivot %u\n", tail - head, head, tail, pivot_idx );
 
     int32_t left_idx        = EXTRACT_IDX( tracker_data[pivot_idx].m_BHIndexNPartition  );
     int32_t right_idx       = EXTRACT_IDX( tracker_data[pivot_idx + 1].m_BHIndexNPartition );
     int32_t left_idx_offset = tracker_data[pivot_idx].m_BHAllocCount;
 
-    printf( "o Bang. Divide & Conquer : %.2u | %.2u | %.2u \n", left_idx, slot_idx, right_idx );
-
     int32_t left_dist  = (int)slot_idx - ( left_idx + left_idx_offset );
     int32_t right_dist = right_idx - (int)( slot_idx + slot_bins );
     
-    printf( "o distance : left %.2d, right %.2d\n", left_dist, right_dist );
-
     if( left_dist >= 0 )
     {
       if( right_dist >= 0 )
@@ -420,7 +354,6 @@ bool MemAlloc::Free( void* data_ptr )
 
           memmove( tracker_data + pivot_idx + 1, tracker_data + pivot_idx + 2, k_BlockHeaderSize * ( tracker_info.m_TrackedCount - pivot_idx + 2 ) );
           tracker_info.m_TrackedCount--;
-          // continue coalesce if possible
           return true;
         }
         else if( left_dist == 0 ) // coalesce left
@@ -435,7 +368,7 @@ bool MemAlloc::Free( void* data_ptr )
         }
 
         // insert between left & right
-        InsertShot( pivot_idx + 1, slot_idx, true );
+        InsertSlot( pivot_idx + 1, true );
         return true;
       }
       else // left_idx < right_idx < slot_idx
@@ -443,16 +376,14 @@ bool MemAlloc::Free( void* data_ptr )
         head = pivot_idx + 1;
       }
     }
-    else
+    else // slot_idx < left_idx < right_idx
     {
-      tail = pivot_idx; // slot_idx < left_idx < right_idx
+      tail = pivot_idx;
     }
   }
   
   if( head == 0 ) // merge/insert at head
   {
-    printf( "o Bang 4. Divide & Conquer : %u\n", head );
-
     int32_t base_idx  = EXTRACT_IDX( tracker_data[0].m_BHIndexNPartition );
     int32_t base_bins = tracker_data[0].m_BHAllocCount;
     int32_t head_dist = base_idx - (int)( slot_idx + slot_bins );
@@ -464,13 +395,11 @@ bool MemAlloc::Free( void* data_ptr )
     }
     else
     {
-      InsertShot( 0, slot_idx, true );
+      InsertSlot( 0, true );
     }
   }
-  else
+  else // merge/insert at tail
   {
-    printf( "o Bang 5. Divide & Conquer : %u\n", tail );
-
     int32_t base_idx  = EXTRACT_IDX( tracker_data[tracker_info.m_TrackedCount - 1].m_BHIndexNPartition );
     int32_t base_bins = tracker_data[ tracker_info.m_TrackedCount - 1 ].m_BHAllocCount;
     int32_t head_dist = base_idx - (int)( slot_idx + slot_bins );
@@ -482,7 +411,7 @@ bool MemAlloc::Free( void* data_ptr )
     }
     else
     {
-      InsertShot( tracker_info.m_TrackedCount - 1, slot_idx, false );
+      InsertSlot( tracker_info.m_TrackedCount - 1, false );
     }
   }
 
