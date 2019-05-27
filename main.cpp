@@ -101,19 +101,19 @@ int main( const int argc, const char* argv[] )
 
   printf( "\n *** Testing Allocation func 2 *** \n\n" );
 
-  const uint32_t alloc_count = 150;
+  const uint32_t alloc_count = 5000;
   void*          test_ptrs2[alloc_count];
   bool           free_idx_flags[alloc_count];
   
   for( uint32_t irequest = 0; irequest < alloc_count; ++irequest )
   {
-    byte_request = ( ( rand() % 512 ) * rand() ) % 1024;
+    byte_request = ( ( rand() % 512 ) * rand() ) % 800;
 
     // randomize hints
     test_ptrs2[irequest] = MemAlloc::Alloc( byte_request, GenerateHint( byte_request ) );
     free_idx_flags[irequest] = true;
     
-    printf( "> request %u\n", byte_request );
+    // printf( "> request %u\n", byte_request );
   }
   
   printf( "--------------------------------------------------------------------------------\n" );
@@ -135,24 +135,72 @@ int main( const int argc, const char* argv[] )
     }
     else
     {
-      byte_request = ( ( rand() % 512 ) * rand() ) % 1024;
+      byte_request = ( ( rand() % 512 ) * rand() ) % 800;
 
       test_ptrs2[free_idx] = MemAlloc::Alloc( byte_request, GenerateHint( byte_request ) );
-      free_idx_flags[free_idx] = true;
+      free_idx_flags[free_idx] = test_ptrs2[free_idx] ? true : false;
       
-      printf( "> request %u\n", byte_request );
+      // printf( "> request %u\n", byte_request );
     }
     force_stop++;
-
-    printf( "--------------------------------------------------------------------------------\n" );
-    MemAlloc::PrintHeapStatus();
-    printf( "--------------------------------------------------------------------------------\n" );
   }
+
+  printf( "--------------------------------------------------------------------------------\n" );
+  MemAlloc::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
   
   printf( "\n *** Testing Allocation func 3 ( alloc & free null )*** \n\n" );
 
   ASSERT_F( MemAlloc::Alloc( 0 ) == nullptr, "" );
   ASSERT_F( MemAlloc::Free( nullptr ) == false, "" );
+
+  printf( "\n *** Testing Allocation func 4 *** \n\n" );
+  
+  for( uint32_t irequest = 0; irequest < alloc_count; ++irequest )
+  {
+    if( free_idx_flags[irequest] )
+    {
+      free_idx_flags[irequest] = false;
+      MemAlloc::Free( test_ptrs2[irequest] );
+    }
+  }
+
+  printf( "--------------------------------------------------------------------------------\n" );
+  MemAlloc::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+
+  const uint32_t alloc_count2 = alloc_count * 10;
+  void* test_ptrs3[alloc_count2];
+  bool  free_idx_flags2[alloc_count2];
+  for( uint32_t irequest = 0; irequest < alloc_count2; ++irequest )
+  {
+    byte_request = ( ( rand() % 512 ) * rand() ) % 4096;
+
+    // randomize hints
+    test_ptrs3[irequest] = MemAlloc::Alloc( byte_request, GenerateHint( byte_request ) );
+    free_idx_flags2[irequest] = test_ptrs3[irequest] ? true : false;
+    
+    // printf( "> request %u\n", byte_request );
+  }
+
+  printf( "--------------------------------------------------------------------------------\n" );
+  MemAlloc::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
+  
+  for( uint32_t irequest = 0; irequest < alloc_count2; ++irequest )
+  {
+    uint32_t free_idx = rand() % alloc_count2;
+
+    if( free_idx_flags2[free_idx] )
+    {
+      free_idx_flags2[free_idx] = false;
+      MemAlloc::Free( test_ptrs3[free_idx] );
+    }
+  }
+  
+  printf( "--------------------------------------------------------------------------------\n" );
+  MemAlloc::PrintHeapStatus();
+  printf( "--------------------------------------------------------------------------------\n" );
 
   //printf( "\n *** Testing ASSERT_F macro *** \n\n" );
 

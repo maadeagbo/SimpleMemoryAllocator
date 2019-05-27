@@ -67,12 +67,14 @@ namespace MemAlloc
     uint32_t       m_TotalPartitionBins;
   };
 
-  void  InitBase();
+  // Over estimate size. Current calculations reduce available size due to the need to
+  // create memory management data structures
+  void  InitBase( uint32_t alloc_size = 0, uint32_t thread_id = 0 );
 
   // hints : 
-  void* Alloc( uint32_t byte_size, uint32_t bucket_hints = k_HintNone, uint8_t block_size = 4 );
+  void* Alloc( uint32_t byte_size, uint32_t bucket_hints = k_HintNone, uint8_t block_size = 4, uint32_t thread_id = 0 );
 
-  bool  Free( void* data_ptr );
+  bool  Free( void* data_ptr, uint32_t thread_id = 0 );
   
   template<typename T>
   T* Alloc( uint32_t byte_size )
@@ -97,10 +99,10 @@ namespace MemAlloc
   };
 
   // Contains heuristics for what bucket the allocation will take place in
-  QueryResult CalcAllocPartitionAndSize( uint32_t alloc_size, uint32_t bucket_hint = k_HintNone );
+  QueryResult CalcAllocPartitionAndSize( uint32_t alloc_size, uint32_t bucket_hint = k_HintNone, uint32_t thread_id = 0 );
 
   // Dump detailed contents of memory state
-  void        PrintHeapStatus();
+  void        PrintHeapStatus( uint32_t thread_id = 0 );
 
 //----------------------------------------------------------------------------------------------
   struct ByteFormat
