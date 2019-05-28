@@ -132,7 +132,7 @@ bool HeapQueryBaseIsValid(uint32_t thread_id)
   return s_MemoryDataThreadValidFlag[thread_id];
 }
 
-void* HeapAlloc( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_size, uint64_t debug_hash, uint32_t thread_id )
+void* HeapAllocate( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_size, uint64_t debug_hash, uint32_t thread_id )
 {
   if ( byte_size == 0 )
   {
@@ -238,7 +238,7 @@ static void InsertSlot( struct HeapTrackerData* tracker_info, struct HeapBlockHe
     tracker_info->m_TrackedCount++;
   };
 
-bool HeapFree( void* data_ptr, uint32_t thread_id )
+bool HeapRelease( void* data_ptr, uint32_t thread_id )
 {
   // This function will maintain the invariant : each free list partition is sorted incrementally by block index
 
@@ -482,7 +482,7 @@ void HeapPrintStatus(uint32_t thread_id)
     b_data                    = TranslateByteFormat( part_data->m_BinSize, k_FormatByte );
     struct ByteFormat b_data2 = TranslateByteFormat( part_data->m_BinCount * part_data->m_BinSize, k_FormatByte );
     
-    printf( "  - Partition %u :: %10.3f %2s (bin size + %zu B), %10u (bin count), %10.3f %2s (partition size)\n", ipartition, b_data.m_Size, b_data.m_Type, s_BlockHeaderSize, part_data->m_BinCount, b_data2.m_Size, b_data2.m_Type );
+    printf( "  - Partition %u :: %10.3f %2s (bin size + %u B), %10u (bin count), %10.3f %2s (partition size)\n", ipartition, b_data.m_Size, b_data.m_Type, s_BlockHeaderSize, part_data->m_BinCount, b_data2.m_Size, b_data2.m_Type );
   }
   
   // For each partition: allocations && free memory (percentages), fragmentation(?)

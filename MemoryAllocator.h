@@ -82,9 +82,9 @@ void HeapInitBase( uint32_t alloc_size /* = 0 */, uint32_t thread_id /* = 0 */ )
 bool HeapQueryBaseIsValid( uint32_t thread_id /* = 0 */ );
 
 // hints are an enum : k_HeapHint... | k_HeapLevel...
-void* HeapAlloc( uint32_t byte_size, uint32_t bucket_hints /* = k_HeapHintNone */, uint8_t block_size /* = 0 */, uint64_t debug_hash /* = 0 */, uint32_t thread_id /* = 0 */ );
+void* HeapAllocate( uint32_t byte_size, uint32_t bucket_hints /* = k_HeapHintNone */, uint8_t block_size /* = 0 */, uint64_t debug_hash /* = 0 */, uint32_t thread_id /* = 0 */ );
 
-bool  HeapFree( void* data_ptr, uint32_t thread_id /* = 0 */ );
+bool  HeapRelease( void* data_ptr, uint32_t thread_id /* = 0 */ );
   
 enum
 {

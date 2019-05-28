@@ -36,12 +36,12 @@ namespace Heap
   // hints are an enum : k_Hint... | k_Level...
   void* Alloc( uint32_t byte_size, uint32_t bucket_hints = k_HintNone, uint8_t block_size = 4, uint64_t debug_hash = 0, uint32_t thread_id = 0 )
   {
-    return HeapAlloc( byte_size, bucket_hints, block_size, debug_hash, thread_id );
+    return HeapAllocate( byte_size, bucket_hints, block_size, debug_hash, thread_id );
   }
 
   bool  Free( void* data_ptr, uint32_t thread_id = 0 )
   {
-    return HeapFree( data_ptr, thread_id );
+    return HeapRelease( data_ptr, thread_id );
   }
   
   template<typename T>
@@ -72,12 +72,12 @@ namespace Heap
     ScopedAllocator( uint32_t thread_id = 0 ) : m_ThreadId( thread_id ) {}
     ~ScopedAllocator()
     {
-      HeapFree( m_DataPtr, m_ThreadId );
+      HeapRelease( m_DataPtr, m_ThreadId );
     }
 
     void* Alloc( uint32_t byte_size, uint8_t block_size = 4, uint64_t debug_hash = 0 )
     {
-      m_DataPtr = HeapAlloc( byte_size, Heap::k_HintNone, block_size, debug_hash, m_ThreadId );
+      m_DataPtr = HeapAllocate( byte_size, Heap::k_HintNone, block_size, debug_hash, m_ThreadId );
       return m_DataPtr;
     }
 
