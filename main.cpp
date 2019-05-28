@@ -98,18 +98,20 @@ static void PrintAllocCalcResult( uint32_t alloc_size, uint32_t hints )
   printf( "o CalcAllocPartitionAndSize:\n" );
   if( hints & Heap::k_HintStrictSize )
   {
-    Heap::ByteFormat b_data = TranslateByteFormat( hints & ~Heap::k_HintStrictSize, Heap::ByteFormat::k_Byte );
+    ByteFormat b_data = TranslateByteFormat( hints & ~Heap::k_HintStrictSize, k_FormatByte );
     printf( "  - Strict size hint : %4.2f %2s\n", b_data.m_Size, b_data.m_Type );
   }
   
-  Heap::QueryResult query = Heap::CalcAllocPartitionAndSize( alloc_size, hints );
+  HeapQueryResult query = Heap::CalcAllocPartitionAndSize( alloc_size, hints );
 
-  printf( "  Status     : %s\n",  query.m_Status & Heap::QueryResult::k_Success ? "Success" : 
-                                  query.m_Status & Heap::QueryResult::k_NoFreeSpace ? "No free space" :
-                                  query.m_Status & Heap::QueryResult::k_ExcessFragmentation ? "Fragmentation" : "unknown" );
+  printf( "  Status     : %s\n",  query.m_Status & k_QuerySuccess ? "Success" : 
+                                  query.m_Status & k_QueryNoFreeSpace ? "No free space" :
+                                  query.m_Status & k_QueryExcessFragmentation ? "Fragmentation" : "unknown" );
   printf( "  Alloc bins : %u\n",  query.m_AllocBins );
 
-  uint32_t partition = query.m_Status &= ~( Heap::QueryResult::k_Success | Heap::QueryResult::k_NoFreeSpace | Heap::QueryResult::k_ExcessFragmentation );
+  uint32_t partition = query.m_Status &= ~( k_QuerySuccess | 
+                                            k_QueryNoFreeSpace |
+                                            k_QueryExcessFragmentation );
   printf( "  Block      : %u B\n", partition );
 }
 
@@ -213,14 +215,14 @@ static int32_t Test3()
   test_ptrs[3] = Heap::Alloc( byte_request, Heap::k_HintStrictSize | Heap::k_Level0 );
 
   printf( "--------------------------------------------------------------------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "--------------------------------------------------------------------------------\n" );
   Heap::Free( test_ptrs[1] );
   Heap::Free( test_ptrs[3] );
   Heap::Free( test_ptrs[0] );
   Heap::Free( test_ptrs[2] );
   printf( "--------------------------------------------------------------------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "--------------------------------------------------------------------------------\n" );
 
   return 0;
@@ -238,7 +240,7 @@ static int32_t Test4()
   bool*  free_idx_flags = Heap::AllocT<bool>( alloc_count );
   
   printf( "----------------------------State bfore allocations----------------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "-------------------------------------------------------------------------------\n" );
   
   for( uint32_t irequest = 0; irequest < alloc_count; ++irequest )
@@ -250,7 +252,7 @@ static int32_t Test4()
   }
   
   printf( "-----------------------------State after allocations----------------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "----------------------------Randomizing free & alloc----------------------------\n" );
 
   uint32_t freed_count = 0;
@@ -277,13 +279,13 @@ static int32_t Test4()
   }
 
   printf( "------------------------State after randomized free & alloc---------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "--------------------------------------------------------------------------------\n" );
   
   DumpMemory( test_ptrs, free_idx_flags, alloc_count );
 
   printf( "----------------------------State after memory dump-----------------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "--------------------------------------------------------------------------------\n" );
   
   return 0;
@@ -313,7 +315,7 @@ static int32_t Test6()
   ASSERT_F( *test_ptrs && *free_idx_flags, "Failed to allocate testing containers" );
 
   printf( "-----------------------State before randomized free & alloc---------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "--------------------------------------------------------------------------------\n" );
 
   for( uint32_t irequest = 0; irequest < alloc_count; ++irequest )
@@ -326,7 +328,7 @@ static int32_t Test6()
   }
 
   printf( "------------------------------State after allocations---------------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "--------------------------------------------------------------------------------\n" );
   
   uint32_t freed_count = 0;
@@ -344,13 +346,13 @@ static int32_t Test6()
   }
   
   printf( "-----------------------------State after randomized free------------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "--------------------------------------------------------------------------------\n" );
   
   DumpMemory( test_ptrs, free_idx_flags, alloc_count );
   
   printf( "----------------------------------State after dump------------------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "--------------------------------------------------------------------------------\n" );
 
   return 0;
@@ -382,14 +384,14 @@ static int32_t Test7()
     printf( "\n\n" );
     
     printf( "---------------------------------scope in---------------------------------------\n" );
-    Heap::PrintHeapStatus();
+    Heap::PrintStatus();
     printf( "---------------------------------scope in---------------------------------------\n" );
 
     printf( "Exiting scope\n\n" );
   }
 
   printf( "--------------------------------------------------------------------------------\n" );
-  Heap::PrintHeapStatus();
+  Heap::PrintStatus();
   printf( "--------------------------------------------------------------------------------\n" );
 
   return 0;
