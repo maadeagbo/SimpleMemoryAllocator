@@ -30,8 +30,8 @@ struct MemoryData
 static struct MemoryData s_MemoryDataThreads[MAX_MEM_THREADS];
 static bool              s_MemoryDataThreadValidFlag[MAX_MEM_THREADS];
 
-static struct HeapPartitionData GetPartition( const uint32_t total_size, uint16_t bin_size, float percentage );
-static uint32_t CalcAllignedAllocSize( uint32_t input, uint32_t alignment );
+static struct HeapPartitionData GetPartition( const uint64_t total_size, uint16_t bin_size, float percentage );
+static uint64_t CalcAllignedAllocSize( uint64_t input, uint32_t alignment );
 
 static const uint32_t s_BlockHeaderSize = (uint32_t)sizeof( struct HeapBlockHeader );
 
@@ -53,7 +53,7 @@ static uint16_t s_HeapBinSizes[k_HeapNumLvl] = { k_HeapLevel0,
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
 
-void HeapInitBase( uint32_t alloc_size, uint32_t thread_id )
+void HeapInitBase( uint64_t alloc_size, uint32_t thread_id )
 {
   struct HeapFreeList* free_list = &s_MemoryDataThreads[thread_id].m_FreeList;
   void*                mem_block = s_MemoryDataThreads[thread_id].m_MemBlock;
@@ -82,7 +82,7 @@ void HeapInitBase( uint32_t alloc_size, uint32_t thread_id )
     free_list->m_TotalPartitionSize += free_list->m_PartitionLvlDetails[ibin].m_Size;
     free_list->m_TotalPartitionBins += free_list->m_PartitionLvlDetails[ibin].m_BinCount;
   }
-  uint32_t tracker_list_size = s_BlockHeaderSize * free_list->m_TotalPartitionBins;
+  uint64_t tracker_list_size = s_BlockHeaderSize * free_list->m_TotalPartitionBins;
 
   // get heap memory from system for free list && partitions
   ASSERT_F( CalcAllignedAllocSize( tracker_list_size + free_list->m_TotalPartitionSize, BASE_ALIGN ) < (uint32_t)-1, 
@@ -109,7 +109,7 @@ void HeapInitBase( uint32_t alloc_size, uint32_t thread_id )
 
   // initialize tracker data for each memory partition
 
-  for( uint32_t ipart_idx = 0, tracker_offsets = 0; ipart_idx < k_HeapNumLvl; ipart_idx++)
+  for( uint64_t ipart_idx = 0, tracker_offsets = 0; ipart_idx < k_HeapNumLvl; ipart_idx++)
   {
     free_list->m_TrackerInfo[ipart_idx].m_HeadIdx      = 0;
     free_list->m_TrackerInfo[ipart_idx].m_TrackedCount = 1;
@@ -132,7 +132,7 @@ bool HeapQueryBaseIsValid(uint32_t thread_id)
   return s_MemoryDataThreadValidFlag[thread_id];
 }
 
-void* HeapAllocate( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_size, uint64_t debug_hash, uint32_t thread_id )
+void* HeapAllocate( uint64_t byte_size, uint32_t bucket_hints, uint8_t block_size, uint64_t debug_hash, uint32_t thread_id )
 {
   if ( byte_size == 0 )
   {
@@ -141,7 +141,7 @@ void* HeapAllocate( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_siz
 
   block_size = block_size ? block_size : 4;
   
-  uint32_t aligned_alloc = CalcAllignedAllocSize( byte_size, block_size );
+  uint64_t aligned_alloc = CalcAllignedAllocSize( byte_size, block_size );
 
   struct HeapQueryResult request = HeapCalcAllocPartitionAndSize( aligned_alloc, bucket_hints, thread_id );
 
@@ -178,7 +178,7 @@ void* HeapAllocate( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_siz
   if( free_slot->m_BHAllocCount > request.m_AllocBins )
   {
     free_slot->m_BHAllocCount -= request.m_AllocBins;
-    uint32_t index             = EXTRACT_IDX( free_slot->m_BHIndexNPartition );
+    uint64_t index             = EXTRACT_IDX( free_slot->m_BHIndexNPartition );
              index            += request.m_AllocBins;
 
     free_slot->m_BHIndexNPartition = SET_INDEX_PART( index, partition_idx );
@@ -210,14 +210,14 @@ void* HeapAllocate( uint32_t byte_size, uint32_t bucket_hints, uint8_t block_siz
   return data; // return pointer to memory region after header
 }
 
-static void CoalesceSlot( struct HeapTrackerData* tracker_info, struct HeapBlockHeader tracker_data[], uint32_t tracker_idx, uint32_t base_idx, uint32_t coalesce_idx, uint32_t coalesce_bins )
+static void CoalesceSlot( struct HeapTrackerData* tracker_info, struct HeapBlockHeader tracker_data[], uint64_t tracker_idx, uint64_t base_idx, uint64_t coalesce_idx, uint64_t coalesce_bins )
 {
   tracker_data[tracker_idx].m_BHIndexNPartition  = SET_INDEX_PART( base_idx < coalesce_idx ? base_idx : coalesce_idx, EXTRACT_PART( tracker_data[tracker_idx].m_BHIndexNPartition ) );
   tracker_data[tracker_idx].m_BHAllocCount      += coalesce_bins;
   tracker_info->m_BinOccupancy                  += coalesce_bins;
 }
 
-static void InsertSlot( struct HeapTrackerData* tracker_info, struct HeapBlockHeader tracker_data[],  struct HeapBlockHeader* header, uint32_t tracker_idx, bool shift_right )
+static void InsertSlot( struct HeapTrackerData* tracker_info, struct HeapBlockHeader tracker_data[],  struct HeapBlockHeader* header, uint64_t tracker_idx, bool shift_right )
   {
     switch( (int)shift_right )
     {
@@ -248,9 +248,9 @@ bool HeapRelease( void* data_ptr, uint32_t thread_id )
   }
 
   struct HeapBlockHeader header       = *( (struct HeapBlockHeader*)( (unsigned char*)data_ptr - s_BlockHeaderSize ) );
-  const uint32_t slot_idx  = EXTRACT_IDX( header.m_BHIndexNPartition );
-  const uint32_t part_idx  = EXTRACT_PART( header.m_BHIndexNPartition );
-  const uint32_t slot_bins = header.m_BHAllocCount;
+  const uint64_t slot_idx  = EXTRACT_IDX( header.m_BHIndexNPartition );
+  const uint64_t part_idx  = EXTRACT_PART( header.m_BHIndexNPartition );
+  const uint64_t slot_bins = header.m_BHAllocCount;
 
   // clear marker/data once copied
   memset( (unsigned char*)data_ptr - s_BlockHeaderSize, 0, s_BlockHeaderSize + 1 );
@@ -269,10 +269,10 @@ bool HeapRelease( void* data_ptr, uint32_t thread_id )
 
   if( tracker_info->m_TrackedCount == 1 ) // if free list has 1 slot, coalesce or insert
   {
-    int32_t base_idx  = EXTRACT_IDX( tracker_data[0].m_BHIndexNPartition );
-    int32_t base_bins = tracker_data[0].m_BHAllocCount;
-    int32_t head_dist = base_idx - (int)( slot_idx + slot_bins );
-    int32_t tail_dist = (int)slot_idx - ( base_idx + base_bins );
+    int64_t base_idx  = EXTRACT_IDX( tracker_data[0].m_BHIndexNPartition );
+    int64_t base_bins = tracker_data[0].m_BHAllocCount;
+    int64_t head_dist = base_idx - (int)( slot_idx + slot_bins );
+    int64_t tail_dist = (int)slot_idx - ( base_idx + base_bins );
 
     if( head_dist == 0 || tail_dist == 0 )
     {
@@ -293,18 +293,18 @@ bool HeapRelease( void* data_ptr, uint32_t thread_id )
   }
   
   // - use divide & conquer to find its spot in list
-  int32_t head = 0;
-  int32_t tail = tracker_info->m_TrackedCount - 1;
+  int64_t head = 0;
+  int64_t tail = tracker_info->m_TrackedCount - 1;
   while( ( tail - head ) > 0 )
   {
-    uint32_t pivot_idx = head + ( ( tail - head ) / 2 );
+    uint64_t pivot_idx = head + ( ( tail - head ) / 2 );
 
-    int32_t left_idx        = EXTRACT_IDX( tracker_data[pivot_idx].m_BHIndexNPartition );
-    int32_t right_idx       = EXTRACT_IDX( tracker_data[pivot_idx + 1].m_BHIndexNPartition );
-    int32_t left_idx_offset = tracker_data[pivot_idx].m_BHAllocCount;
+    int64_t left_idx        = EXTRACT_IDX( tracker_data[pivot_idx].m_BHIndexNPartition );
+    int64_t right_idx       = EXTRACT_IDX( tracker_data[pivot_idx + 1].m_BHIndexNPartition );
+    int64_t left_idx_offset = tracker_data[pivot_idx].m_BHAllocCount;
 
-    int32_t left_dist  = (int)slot_idx - ( left_idx + left_idx_offset );
-    int32_t right_dist = right_idx - (int)( slot_idx + slot_bins );
+    int64_t left_dist  = (int)slot_idx - ( left_idx + left_idx_offset );
+    int64_t right_dist = right_idx - (int)( slot_idx + slot_bins );
 
     if( left_dist >= 0 )
     {
@@ -347,10 +347,10 @@ bool HeapRelease( void* data_ptr, uint32_t thread_id )
   
   if( head == 0 ) // merge/insert at head
   {
-    int32_t base_idx  = EXTRACT_IDX( tracker_data[0].m_BHIndexNPartition );
-    int32_t base_bins = tracker_data[0].m_BHAllocCount;
-    int32_t head_dist = base_idx - (int)( slot_idx + slot_bins );
-    int32_t tail_dist = (int)slot_idx - ( base_idx + base_bins );
+    int64_t base_idx  = EXTRACT_IDX( tracker_data[0].m_BHIndexNPartition );
+    int64_t base_bins = tracker_data[0].m_BHAllocCount;
+    int64_t head_dist = base_idx - (int)( slot_idx + slot_bins );
+    int64_t tail_dist = (int)slot_idx - ( base_idx + base_bins );
 
     if( head_dist == 0 || tail_dist == 0 ) // merge/insert at tail
     {
@@ -365,10 +365,10 @@ bool HeapRelease( void* data_ptr, uint32_t thread_id )
   }
   else // merge/insert at tail
   {
-    int32_t base_idx  = EXTRACT_IDX( tracker_data[tracker_info->m_TrackedCount - 1].m_BHIndexNPartition );
-    int32_t base_bins = tracker_data[ tracker_info->m_TrackedCount - 1 ].m_BHAllocCount;
-    int32_t head_dist = base_idx - (int)( slot_idx + slot_bins );
-    int32_t tail_dist = (int)slot_idx - ( base_idx + base_bins );
+    int64_t base_idx  = EXTRACT_IDX( tracker_data[tracker_info->m_TrackedCount - 1].m_BHIndexNPartition );
+    int64_t base_bins = tracker_data[ tracker_info->m_TrackedCount - 1 ].m_BHAllocCount;
+    int64_t head_dist = base_idx - (int)( slot_idx + slot_bins );
+    int64_t tail_dist = (int)slot_idx - ( base_idx + base_bins );
     
     if( head_dist == 0 || tail_dist == 0 )
     {
@@ -383,7 +383,7 @@ bool HeapRelease( void* data_ptr, uint32_t thread_id )
   }
 }
 
-struct HeapQueryResult HeapCalcAllocPartitionAndSize(uint32_t alloc_size, uint32_t bucket_hint, uint32_t thread_id)
+struct HeapQueryResult HeapCalcAllocPartitionAndSize( uint64_t alloc_size, uint32_t bucket_hint, uint32_t thread_id )
 {
   struct HeapQueryResult result;
   alloc_size = CalcAllignedAllocSize( alloc_size, BASE_ALIGN );
@@ -391,7 +391,7 @@ struct HeapQueryResult HeapCalcAllocPartitionAndSize(uint32_t alloc_size, uint32
   // Simple heuristic : find best-fit heap partition
   uint32_t chosen_bucket           = k_HeapLevel0;
   uint32_t chosen_bucket_idx       = 0;
-  uint32_t chosen_bucket_bin_count = 0;
+  uint64_t chosen_bucket_bin_count = 0;
 
   for( size_t i = 0; i < k_HeapNumLvl && chosen_bucket < s_HeapBinSizes[k_HeapNumLvl - 1]; i++ )
   {
@@ -482,7 +482,7 @@ void HeapPrintStatus(uint32_t thread_id)
     b_data                    = TranslateByteFormat( part_data->m_BinSize, k_FormatByte );
     struct ByteFormat b_data2 = TranslateByteFormat( part_data->m_BinCount * part_data->m_BinSize, k_FormatByte );
     
-    printf( "  - Partition %u :: %10.3f %2s (bin size + %u B), %10u (bin count), %10.3f %2s (partition size)\n", ipartition, b_data.m_Size, b_data.m_Type, s_BlockHeaderSize, part_data->m_BinCount, b_data2.m_Size, b_data2.m_Type );
+    printf( "  - Partition %u :: %10.3f %2s (bin size + %u B), %10" PRIu64 " (bin count), %10.3f %2s (partition size)\n", ipartition, b_data.m_Size, b_data.m_Type, s_BlockHeaderSize, part_data->m_BinCount, b_data2.m_Size, b_data2.m_Type );
   }
   
   // For each partition: allocations && free memory (percentages), fragmentation(?)
@@ -504,10 +504,10 @@ void HeapPrintStatus(uint32_t thread_id)
     memset( percent_str, '-', sizeof( percent_str ) - 1 );
     memset( percent_str, 'x', bar_ticks );
 
-    printf( "    [%-*s] (%.3f%% allocated, free slots %u)\n", (int)sizeof( percent_str ) - 1, percent_str, ( 1.f - mem_occupancy ) * 100.f, tracked_data->m_TrackedCount );
+    printf( "    [%-*s] (%.3f%% allocated, free slots %" PRIu64 ")\n", (int)sizeof( percent_str ) - 1, percent_str, ( 1.f - mem_occupancy ) * 100.f, tracked_data->m_TrackedCount );
 
-    uint32_t total_free_blocks = 0;
-    uint32_t largest_block     = 0;
+    uint64_t total_free_blocks = 0;
+    uint64_t largest_block     = 0;
     for(uint32_t itracker_idx = 0; itracker_idx < tracked_data->m_TrackedCount; itracker_idx++)
     {
       struct HeapBlockHeader* tracker = &free_list->m_Tracker[tracked_data->m_PartitionOffset + itracker_idx];
@@ -516,13 +516,13 @@ void HeapPrintStatus(uint32_t thread_id)
       total_free_blocks += tracker->m_BHAllocCount;
       largest_block      = tracker->m_BHAllocCount > largest_block ? tracker->m_BHAllocCount : largest_block;
 
-      printf( "    | %10u, %10u (coalesced blocks), %10.5f %2s\n", EXTRACT_IDX( tracker->m_BHIndexNPartition ), tracker->m_BHAllocCount, b_data.m_Size, b_data.m_Type );
+      printf( "    | %10" PRIu64 ", %10" PRIu64 " (coalesced blocks), %10.5f %2s\n", EXTRACT_IDX( tracker->m_BHIndexNPartition ), tracker->m_BHAllocCount, b_data.m_Size, b_data.m_Type );
     }
     printf( "    - fragmentation %10.5f%%\n", total_free_blocks == 0 ? 100.f : (double)( total_free_blocks - largest_block ) / (double)total_free_blocks );
   }
 }
 
-struct ByteFormat TranslateByteFormat(uint32_t size, uint8_t byte_type)
+struct ByteFormat TranslateByteFormat( uint64_t size, uint8_t byte_type )
 {
   struct ByteFormat bf = { 0 };
 
@@ -540,7 +540,7 @@ struct ByteFormat TranslateByteFormat(uint32_t size, uint8_t byte_type)
       bf.m_Type = "mB";
       return bf;
     }
-    bf.m_Size = (float)size;
+    bf.m_Size = (double)size;
     bf.m_Type = "B";
     return bf;
   }
@@ -552,11 +552,11 @@ struct ByteFormat TranslateByteFormat(uint32_t size, uint8_t byte_type)
       bf.m_Type = "mB";
       return bf;
     }
-    bf.m_Size = (float)size;
+    bf.m_Size = (double)size;
     bf.m_Type = "kB";
     return bf;
   }
-  bf.m_Size = (float)size;
+  bf.m_Size = (double)size;
   bf.m_Type = "kB";
   return bf;
 }
@@ -567,11 +567,11 @@ struct ByteFormat TranslateByteFormat(uint32_t size, uint8_t byte_type)
 // Size of partition is restricted by 2 factors: freelist tracker && block header
 // * Each bin in the partition must support a blockheader
 // * Each bin in the partition must be possibly represented by a tracker in the free list
-static struct HeapPartitionData GetPartition( const uint32_t total_size, uint16_t bin_size, float percentage )
+static struct HeapPartitionData GetPartition( const uint64_t total_size, uint16_t bin_size, float percentage )
 {
   struct HeapPartitionData part_output = { 0 };
 
-  uint32_t fixed_part_size = CalcAllignedAllocSize( (uint32_t)( (double)total_size * (double)percentage ), BASE_ALIGN );
+  uint64_t fixed_part_size = CalcAllignedAllocSize( (uint32_t)( (double)total_size * (double)percentage ), BASE_ALIGN );
 
   part_output.m_BinSize  = bin_size + s_BlockHeaderSize;
   // m_BinCount calculation : s_BlockHeaderSize is added to the denominator because each bin needs
@@ -583,7 +583,7 @@ static struct HeapPartitionData GetPartition( const uint32_t total_size, uint16_
   return part_output;
 }
 
-static uint32_t CalcAllignedAllocSize( uint32_t input, uint32_t alignment )
+static uint64_t CalcAllignedAllocSize( uint64_t input, uint32_t alignment )
 {
   const uint32_t remainder = input % alignment;
   input += remainder ? alignment : 0;

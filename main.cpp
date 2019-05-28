@@ -107,7 +107,7 @@ static void PrintAllocCalcResult( uint32_t alloc_size, uint32_t hints )
   printf( "  Status     : %s\n",  query.m_Status & k_QuerySuccess ? "Success" : 
                                   query.m_Status & k_QueryNoFreeSpace ? "No free space" :
                                   query.m_Status & k_QueryExcessFragmentation ? "Fragmentation" : "unknown" );
-  printf( "  Alloc bins : %u\n",  query.m_AllocBins );
+  printf( "  Alloc bins : %" PRIu64 "\n",  query.m_AllocBins );
 
   uint32_t partition = query.m_Status &= ~( k_QuerySuccess | 
                                             k_QueryNoFreeSpace |
@@ -236,8 +236,9 @@ static int32_t Test4()
   const uint32_t alloc_count = 1000000;
   printf( "\n *** Testing Allocation func ( %u allocations and random-ordered frees ) *** \n\n", alloc_count );
 
-  void** test_ptrs      = Heap::AllocT<void*>( alloc_count );
-  bool*  free_idx_flags = Heap::AllocT<bool>( alloc_count );
+  Heap::ScopedAllocator allocator;
+  void** test_ptrs      = allocator.AllocT<void*>( alloc_count );
+  bool*  free_idx_flags = allocator.AllocT<bool>( alloc_count );
   
   printf( "----------------------------State bfore allocations----------------------------\n" );
   Heap::PrintStatus();
@@ -309,8 +310,9 @@ static int32_t Test6()
   const uint32_t alloc_count = 100000 * 100;
   printf( "\n *** Testing Allocation func ( %u allocations and random-ordered frees ) *** \n\n", alloc_count );
 
-  void** test_ptrs      = Heap::AllocT<void*>( alloc_count );
-  bool*  free_idx_flags = Heap::AllocT<bool>( alloc_count );
+  Heap::ScopedAllocator allocator;
+  void** test_ptrs      = allocator.AllocT<void*>( alloc_count );
+  bool*  free_idx_flags = allocator.AllocT<bool>( alloc_count );
 
   ASSERT_F( *test_ptrs && *free_idx_flags, "Failed to allocate testing containers" );
 

@@ -19,8 +19,8 @@ enum
 struct HeapBlockHeader
 {
 
-  uint32_t m_BHIndexNPartition;
-  uint32_t m_BHAllocCount;
+  uint64_t m_BHIndexNPartition;
+  uint64_t m_BHAllocCount;
 #ifdef TAG_MEMORY
   uint64_t m_BHTagHash;
 #endif
@@ -29,18 +29,18 @@ struct HeapBlockHeader
 // Details a partitioned section of memory
 struct HeapPartitionData
 {
-  uint32_t m_Size;
-  uint32_t m_BinCount;
+  uint64_t m_Size;
+  uint64_t m_BinCount;
   uint32_t m_BinSize;
 };
 
 // Runtime information on partitioned memory
 struct HeapTrackerData
 {
-  uint32_t m_HeadIdx;
-  uint32_t m_TrackedCount;
-  uint32_t m_PartitionOffset;
-  uint32_t m_BinOccupancy;
+  uint64_t m_HeadIdx;
+  uint64_t m_TrackedCount;
+  uint64_t m_PartitionOffset;
+  uint64_t m_BinOccupancy;
 };
 
 enum // sizes of fixed allocation BucketFlags
@@ -69,20 +69,20 @@ struct HeapFreeList
   struct HeapBlockHeader    m_LargestAlloc[k_HeapNumLvl];
   struct HeapTrackerData    m_TrackerInfo[k_HeapNumLvl];
 
-  uint32_t       m_TotalPartitionSize;
-  uint32_t       m_TotalPartitionBins;
+  uint64_t       m_TotalPartitionSize;
+  uint64_t       m_TotalPartitionBins;
 };
 
 // Over estimate size. Current calculations reduce available size due to the need to
 // create memory management data structures
 // Passing in zero to both parameters means set to default size && thread
-void HeapInitBase( uint32_t alloc_size /* = 0 */, uint32_t thread_id /* = 0 */ );
+void HeapInitBase( uint64_t alloc_size /* = 0 */, uint32_t thread_id /* = 0 */ );
 
 // Query the status of the heap contained in the thread ( 0 means main thread )
 bool HeapQueryBaseIsValid( uint32_t thread_id /* = 0 */ );
 
 // hints are an enum : k_HeapHint... | k_HeapLevel...
-void* HeapAllocate( uint32_t byte_size, uint32_t bucket_hints /* = k_HeapHintNone */, uint8_t block_size /* = 0 */, uint64_t debug_hash /* = 0 */, uint32_t thread_id /* = 0 */ );
+void* HeapAllocate( uint64_t byte_size, uint32_t bucket_hints /* = k_HeapHintNone */, uint8_t block_size /* = 0 */, uint64_t debug_hash /* = 0 */, uint32_t thread_id /* = 0 */ );
 
 bool  HeapRelease( void* data_ptr, uint32_t thread_id /* = 0 */ );
   
@@ -97,13 +97,13 @@ enum
     
 struct HeapQueryResult
 {
-  uint32_t     m_AllocBins;
+  uint64_t     m_AllocBins;
+  uint64_t     m_TrackerSelectedIdx;
   uint32_t     m_Status;
-  uint32_t     m_TrackerSelectedIdx;
 };
 
 // Contains heuristics for what bucket the allocation will take place in
-struct HeapQueryResult HeapCalcAllocPartitionAndSize( uint32_t alloc_size, uint32_t bucket_hint /* = k_HeapHintNone */, uint32_t thread_id /* = 0 */ );
+struct HeapQueryResult HeapCalcAllocPartitionAndSize( uint64_t alloc_size, uint32_t bucket_hint /* = k_HeapHintNone */, uint32_t thread_id /* = 0 */ );
 
 // Dump detailed contents of memory state
 void HeapPrintStatus( uint32_t thread_id );
@@ -120,11 +120,11 @@ enum
 
 struct ByteFormat
 {
-  float       m_Size;
+  double      m_Size;
   const char* m_Type;
 };
 
-struct ByteFormat TranslateByteFormat( uint32_t size, uint8_t byte_type );
+struct ByteFormat TranslateByteFormat( uint64_t size, uint8_t byte_type );
 
 #ifdef __cplusplus
 }
